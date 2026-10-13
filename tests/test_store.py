@@ -28,3 +28,17 @@ def test_request_log():
     db.log_request("linkedin", "search", 429, 120)
     row = db.conn().execute("SELECT * FROM requests").fetchone()
     assert row["status"] == 429 and row["source"] == "linkedin"
+
+
+def test_per_country_copies_are_one_job_and_keep_the_best():
+    from vigia.models import Job
+    br = Job(source="ashby", source_id="1", title="Back-End (Python) Engineer - Brazil",
+             company="truelogic", url="https://br", location="São Paulo (Remote)")
+    la = Job(source="ashby", source_id="2", title="Back-End (Python) Engineer - LATAM",
+             company="truelogic", url="https://latam", location="LatAm (Remote)")
+    assert br.dedupe_key == la.dedupe_key
+    db.upsert_job(br, "out", 2, {"reasons": ["restricted"]})
+    db.upsert_job(la, "fit", 9, {"reasons": []})
+    rows = db.all_jobs()
+    assert len(rows) == 1
+    assert rows[0]["verdict"] == "fit" and rows[0]["url"] == "https://latam"

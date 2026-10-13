@@ -126,3 +126,34 @@ def test_company_exclude(profile):
     j.company = "BairesDev"
     verdict, _, flags = evaluate(j, profile)
     assert verdict == "out" and "company excluded (bairesdev)" in flags["reasons"]
+
+
+def test_city_remote_is_country_bound_even_if_blurb_mentions_latam(profile):
+    # Nubank: "Palo Alto (Remote)"; the company blurb talks about Latin America.
+    j = job(title="Lead Software Engineer (Crypto)", location="Palo Alto (Remote)",
+            description="Nubank is one of the largest digital banking platforms in Latin America.")
+    assert region(j, profile)[0] == "restricted"
+
+
+def test_worldwide_location_but_text_requires_europe(profile):
+    # Makersite on Himalayas: location "Worldwide", text requires living in Europe.
+    j = job(location="Worldwide", description="Required to be based in Berlin, Munich, London or Porto.")
+    assert region(j, profile)[0] == "restricted"
+
+
+def test_must_be_based_in_latam_is_ok(profile):
+    j = job(location="Remote", description="You must be based in LATAM and overlap with EST.")
+    assert region(j, profile)[0] == "ok"
+
+
+def test_latam_in_title_is_ok(profile):
+    j = job(title="Python Go Backend Engineer ( LATAM )", location="United States")
+    assert region(j, profile)[0] == "ok"
+
+
+def test_company_blurb_about_latam_does_not_open_the_role(profile):
+    for blurb in ("We power 25 locations in 16 countries across Latin America.",
+                  "A talent-density team driven to make an impact in Latin America.",
+                  "We connect talent with enterprise clients across Latin America."):
+        j = job(location="Brazil", description=blurb)
+        assert region(j, profile)[0] == "restricted", blurb

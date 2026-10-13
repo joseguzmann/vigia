@@ -32,7 +32,8 @@ YEARS_RE = re.compile(
 YEARS_NOISE_RE = re.compile(r"(over|for|since|founded|history|ago|in business|leading the way)\s*$", re.I)
 
 RESTRICTION_RE = re.compile(
-    r"must\s+(?:be\s+)?(?:located|based|resid\w*|liv\w*)\s+in"
+    r"(?:must|required\s+to|need\s+to|needs\s+to|have\s+to)\s+(?:be\s+)?"
+    r"(?:located|based|resid\w*|liv\w*)\s+in"
     r"|(?:legal\s+)?right\s+to\s+work\s+in"
     r"|work\s+authori[sz]ation"
     r"|(?:only|exclusively)\s+(?:open\s+to\s+)?candidates\s+(?:based|located|residing)"
@@ -79,42 +80,59 @@ def years_required(text: str) -> int | None:
     return max(found) if found else None
 
 
-# In the text of a posting, only explicit phrases count as "you can work from there".
-# Generic words like "global" or "worldwide" appear in company blurbs ("a global leader")
-# and say nothing about where the hire can live.
-OPEN_TEXT_RE = re.compile(
-    r"\blatam\b|latin america|latinoam[eé]rica|south america|am[eé]rica latina"
-    r"|work from anywhere|anywhere in the world|fully remote worldwide|remote[ ,(-]*worldwide"
-    r"|open to (?:candidates|applicants) (?:from )?(?:anywhere|worldwide)", re.I)
-# Office-bound markers in the title or location beat any "LATAM" in the body text.
+# Where-you-can-work signals, from strongest to weakest:
+#   1. office-bound markers in title/location (hybrid, onsite) → restricted
+#   2. a LATAM-type region in the location → ok
+#   3. an explicit restriction in the text ("must be located in ...") → restricted,
+#      unless what follows it is itself an eligible region ("must be based in LATAM")
+#   4. an explicit opening in the title or text ("open to candidates in ... LATAM",
+#      "anywhere in Latin America", "LATAM" in the title) → ok
+#   5. a generic remote location ("Remote", "Worldwide") → ok
+#   6. anything else: a specific city/country, even with "(Remote)" next to it, means
+#      remote within that country → restricted
+# A bare "LATAM" somewhere in the body (company blurbs: "offices across Latin America")
+# is NOT a signal: it is what made "Palo Alto (Remote)" look open.
+LATAM = r"(?:latam|latin america|latinoam[eé]rica|south america|am[eé]rica latina|the americas|ecuador)"
+# Phrases about WHO they hire, not about the company ("offices across Latin America").
+OPEN_STRONG_RE = re.compile(
+    r"(?:open\s+to\s+(?:candidates|applicants|talent|engineers|people)\b[^.\n]{0,40}?"
+    r"|hiring\s+(?:in|from|across|throughout)\s+(?:the\s+)?"
+    r"|(?:candidates|applicants|engineers|developers)\s+(?:from|in|based\s+in|located\s+in|living\s+in)\s+(?:the\s+)?"
+    r"|anywhere\s+in\s+(?:the\s+)?"
+    r"|(?:you\s+(?:are|must\s+be)\s+)?(?:based|located|living|residing)\s+(?:anywhere\s+)?in\s+(?:the\s+)?"
+    r"|work\s+(?:remotely\s+)?from\s+(?:anywhere\s+in\s+)?(?:the\s+)?)" + LATAM +
+    r"|\b(?:remote|remoto)\s*[-–(,/]\s*" + LATAM +
+    r"|work\s+from\s+anywhere|anywhere\s+in\s+the\s+world|remote[ ,(-]*worldwide"
+    r"|open\s+to\s+(?:candidates|applicants)\s+(?:from\s+)?(?:anywhere|worldwide)", re.I)
+LATAM_RE = re.compile(r"\b" + LATAM + r"\b", re.I)
 OFFICE_RE = re.compile(r"\bhybrid\b|\bh[ií]brido\b|\bon-?site\b|\bin-office\b|\bpresencial\b", re.I)
-GENERIC_REMOTE = {"", "remote", "remote job", "anywhere", "worldwide", "global", "fully remote"}
+GENERIC_REMOTE = {"", "remote", "remote job", "anywhere", "worldwide", "global", "fully remote",
+                  "remote, global", "remote, global (remote)", "remote (global)", "worldwide (remote)"}
+GENERIC_WORDS = {"worldwide", "anywhere", "global"}
 
 
 def region(job: Job, profile: dict) -> tuple[str, str]:
-    """("ok" | "restricted" | "unknown", evidence).
-
-    Order matters: an eligible place in the location wins; then an explicit LATAM /
-    anywhere phrase in the text; then an explicit restriction; then the location itself
-    (a specific country or city that is not eligible means the role is tied to it).
-    """
+    """("ok" | "restricted" | "unknown", evidence). See the signal order above."""
     regions = [r.lower() for r in profile.get("eligible_regions", [])]
+    specific = [r for r in regions if r not in GENERIC_WORDS]
     loc = (job.location or "").lower().strip()
     text = f"{job.title}\n{job.description}"
 
     office = OFFICE_RE.search(f"{job.title} {job.location}")
     if office:
         return "restricted", f"office-bound: {office.group(0)}"
-    hit_loc = next((r for r in regions if r in loc), None)
+    hit_loc = next((r for r in specific if r in loc), None)
     if hit_loc:
         return "ok", f"location: {hit_loc}"
-    open_text = OPEN_TEXT_RE.search(text)
-    if open_text:
-        return "ok", f"text: {open_text.group(0)}"
-    restriction = RESTRICTION_RE.search(text)
-    if restriction:
-        return "restricted", restriction.group(0)
-    if loc in GENERIC_REMOTE:
+    for m in RESTRICTION_RE.finditer(text):
+        if not LATAM_RE.search(text[m.end():m.end() + 60]):
+            return "restricted", m.group(0)
+    if LATAM_RE.search(job.title):
+        return "ok", "title mentions LATAM"
+    opening = OPEN_STRONG_RE.search(text)
+    if opening:
+        return "ok", f"text: {opening.group(0)[:80]}"
+    if loc in GENERIC_REMOTE or any(w in loc for w in GENERIC_WORDS):
         return ("ok", "remote, no restriction stated") if job.remote is not False else ("unknown", "")
     if "unspecified" in loc:
         return "unknown", job.location

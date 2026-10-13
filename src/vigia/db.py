@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS state (
 """
 
 _conn: sqlite3.Connection | None = None
+RANK = {"out": 0, "review": 1, "fit": 2}
 
 
 def now() -> str:
@@ -143,7 +144,7 @@ def upsert_job(job, verdict: str, score: int, flags: dict) -> bool:
     c = conn()
     ts = now()
     posted = job.posted_at.isoformat(timespec="seconds") if job.posted_at else None
-    row = c.execute("SELECT id, seen_in, description FROM jobs WHERE dedupe_key = ?",
+    row = c.execute("SELECT id, seen_in, description, verdict FROM jobs WHERE dedupe_key = ?",
                     (job.dedupe_key,)).fetchone()
     if row is None:
         c.execute(
@@ -159,11 +160,20 @@ def upsert_job(job, verdict: str, score: int, flags: dict) -> bool:
         return True
 
     seen_in = json.loads(row["seen_in"] or "[]")
-    if not any(s["source"] == job.source for s in seen_in):
+    if not any(s["url"] == job.url for s in seen_in):
         seen_in.append({"source": job.source, "url": job.url})
-    # A richer description from a second source re-flags the job; otherwise keep what we had.
+    # The same role can arrive again from another board, or as another country's copy of
+    # the posting. Keep the version that is best for the candidate (e.g. the "LATAM" copy
+    # over the "Brazil" one); otherwise keep the richer description.
+    better = RANK.get(verdict, 0) > RANK.get(row["verdict"], 0)
     longer = len(job.description or "") > len(row["description"] or "")
-    if longer:
+    if better:
+        c.execute("""UPDATE jobs SET last_seen = ?, seen_in = ?, url = ?, location = ?, remote = ?,
+                         description = ?, salary = ?, verdict = ?, score = ?, flags = ? WHERE id = ?""",
+                  (ts, json.dumps(seen_in), job.url, job.location, _bool(job.remote),
+                   job.description or row["description"], job.salary, verdict, score,
+                   json.dumps(flags), row["id"]))
+    elif longer and RANK.get(verdict, 0) == RANK.get(row["verdict"], 0):
         c.execute("""UPDATE jobs SET last_seen = ?, seen_in = ?, description = ?, verdict = ?,
                          score = ?, flags = ? WHERE id = ?""",
                   (ts, json.dumps(seen_in), job.description, verdict, score,
@@ -190,6 +200,36 @@ def jobs_since(since: str) -> list[sqlite3.Row]:
 
 def all_jobs() -> list[sqlite3.Row]:
     return conn().execute("SELECT * FROM jobs").fetchall()
+
+
+def merge_duplicates(key_for) -> int:
+    """Recompute dedupe keys (after the rule changed) and fold duplicates into one row.
+    The kept row is the one with the best verdict; it inherits every board it was seen on."""
+    c = conn()
+    rows = sorted(all_jobs(), key=lambda r: (-RANK.get(r["verdict"], 0), -(r["score"] or 0), r["id"]))
+    keep: dict[str, sqlite3.Row] = {}
+    merged = 0
+    for r in rows:
+        key = key_for(r)
+        if key not in keep:
+            keep[key] = r
+            continue
+        k = keep[key]
+        seen = json.loads(k["seen_in"] or "[]")
+        for s in json.loads(r["seen_in"] or "[]"):
+            if not any(x["url"] == s["url"] for x in seen):
+                seen.append(s)
+        c.execute("UPDATE jobs SET seen_in = ?, first_seen = MIN(first_seen, ?) WHERE id = ?",
+                  (json.dumps(seen), r["first_seen"], k["id"]))
+        c.execute("DELETE FROM jobs WHERE id = ?", (r["id"],))
+        merged += 1
+    # Now that every key is unique, store the new keys (two passes avoid UNIQUE clashes).
+    for key, r in keep.items():
+        c.execute("UPDATE jobs SET dedupe_key = ? WHERE id = ?", (f"tmp:{r['id']}", r["id"]))
+    for key, r in keep.items():
+        c.execute("UPDATE jobs SET dedupe_key = ? WHERE id = ?", (key, r["id"]))
+    c.commit()
+    return merged
 
 
 def update_flags(job_id: int, verdict: str, score: int, flags: dict) -> None:

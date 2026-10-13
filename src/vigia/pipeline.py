@@ -61,7 +61,9 @@ def reflag() -> dict:
             changed += 1
         db.update_flags(r["id"], verdict, score, f)
     db.commit()
-    return {"jobs": len(rows), "changed": changed}
+    from vigia.models import dedupe_key
+    merged = db.merge_duplicates(lambda r: dedupe_key(r["company"], r["title"]))
+    return {"jobs": len(rows), "changed": changed, "merged_duplicates": merged}
 
 
 def enabled_sources() -> list[str]:
