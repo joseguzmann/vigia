@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.env
+# Local config and data: the real config holds a personal profile; data is per-install.
+config/vigia.yaml
+data/
+*.db
+*.db-journal
+reports/
+.DS_Store

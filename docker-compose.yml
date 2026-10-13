@@ -1,0 +1,15 @@
+services:
+  vigia:
+    build: .
+    image: vigia:latest
+    container_name: vigia
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/Guayaquil}
+    volumes:
+      - vigia-data:/data
+      # Your personal config (git-ignored). Falls back to the example inside the image.
+      - ./config/vigia.yaml:/app/config/vigia.yaml:ro
+
+volumes:
+  vigia-data:

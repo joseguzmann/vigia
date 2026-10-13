@@ -1,0 +1,29 @@
+[project]
+name = "vigia"
+version = "0.1.0"
+description = "A self-hosted job radar: collects postings from many sources, flags what fits, and reports what is new."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+  "requests>=2.32",
+  "beautifulsoup4>=4.12",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+vigia = "vigia.cli:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

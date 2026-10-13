@@ -1,0 +1,139 @@
+# Vigía configuration. Copy to config/vigia.yaml (git-ignored) and adapt it to yourself.
+# The collector stores everything it finds; this file only decides how jobs are
+# flagged and ranked, so you can change it later without collecting again.
+
+profile:
+  # Titles worth collecting. Broad on purpose: ranking happens later.
+  title_include:
+    - ai engineer
+    - ml engineer
+    - llm
+    - genai
+    - generative ai
+    - ai agent
+    - agentic
+    - agent engineer
+    - applied ai
+    - conversational ai
+    - ai automation
+    - forward deployed
+    - backend
+    - back-end
+    - python
+    - django
+    - fastapi
+    - software engineer
+    - platform engineer
+    - full stack
+    - fullstack
+  # Titles that are never what we want, even if they match above.
+  title_exclude:
+    - intern
+    - internship
+    - sales
+    - account executive
+    - marketing
+    - recruiter
+    - designer
+    - support agent
+    - customer support
+    - ios
+    - android
+    - ".net"
+    - php
+    - product manager
+    - program manager
+    - director
+    - vice president
+    - head of
+    - insurance agent
+
+  # Where the candidate can work from. A job is eligible if its location or text
+  # mentions one of these, or if it is remote with no stated restriction.
+  eligible_regions:
+    - worldwide
+    - anywhere
+    - global
+    - latam
+    - latin america
+    - south america
+    - americas
+    - ecuador
+
+  # Companies to never show, matched against the company name.
+  company_exclude: []
+
+  # Postings older than this are stale: often filled, or ghost listings.
+  max_age_days: 45
+
+  # Years of experience the candidate has. Jobs asking for more are marked "out".
+  max_years: 4
+
+  # Skills the candidate has. Each one found in a posting adds to its score.
+  stack:
+    - python
+    - fastapi
+    - django
+    - langgraph
+    - langchain
+    - rag
+    - postgres
+    - pgvector
+    - typescript
+    - node
+    - docker
+    - llm
+    - agent
+    - eval
+    - langfuse
+    - langsmith
+    - rabbitmq
+    - redis
+    - aws
+
+sources:
+  getonbrd:
+    enabled: true
+    every_minutes: 180
+    queries: [llm, ai engineer, langchain, agentes, python, backend, django]
+  # Company boards: companies that hire remotely in LATAM, plus remote-first AI companies.
+  greenhouse:
+    enabled: true
+    every_minutes: 360
+    boards: [coderoad, sezzle, wizeline, moduscreate, nortal, turing, vtex, clara, gitlab, vercel]
+  ashby:
+    enabled: true
+    every_minutes: 360
+    boards: [truelogic, andela, terminal, oyster, fullstack, addi, nubank, mastra, elevenlabs,
+             supabase, posthog, langchain, n8n, zapier, modal, sierra, decagon, cohere]
+  lever:
+    enabled: true
+    every_minutes: 360
+    boards: [tekton, oowlish, toptal, kavak]
+  remotive:
+    enabled: true
+    every_minutes: 240
+    queries: [python, backend, ai, llm, machine learning engineer]
+  himalayas:
+    enabled: true
+    every_minutes: 240
+    queries: [ai engineer, llm, python backend, agentic]
+  jobicy:
+    enabled: true
+    every_minutes: 360
+  hn_whoishiring:
+    enabled: true
+    every_minutes: 720
+  linkedin:
+    # Optional. Uses LinkedIn's public (logged-out) job search, one query per run,
+    # and fetches only the descriptions of jobs that pass the title/location filter.
+    # LinkedIn rate-limits by IP: keep it slow. `vigia throttle` shows how it is going.
+    enabled: false
+    every_minutes: 45
+    hours_old: 48
+    max_descriptions: 8
+    pause_seconds: [6, 12]
+    queries:
+      - {keywords: AI Engineer, location: Ecuador}
+      - {keywords: LLM Engineer, location: Latin America}
+      - {keywords: Python Backend Engineer, location: Ecuador}
