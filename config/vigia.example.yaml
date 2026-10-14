@@ -127,11 +127,15 @@ sources:
     enabled: false
     every_minutes: 720
     queries_per_run: 6
-    posted_within_days: 14
-    freshness: qdr:w
+    posted_within_days: 21
+    freshness: qdr:m
     families: [ai, backend, fullstack]
+    # Measured 2026-10-14: a bare "remote" returns US/India posts; naming LATAM (or writing
+    # in Spanish) is what surfaces roles open to the region.
     templates:
-      - 'site:linkedin.com/posts hiring "{phrase}" remote'
+      - 'site:linkedin.com/posts hiring "{phrase}" LATAM'
+      - 'site:linkedin.com/posts hiring "{phrase}" "Latin America" remote'
+      - 'site:linkedin.com/posts buscamos "{phrase}" remoto LATAM'
   linkedin:
     # Optional. Uses LinkedIn's public (logged-out) job search, one query per run,
     # and fetches only the descriptions of jobs that pass the title/location filter.

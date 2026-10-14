@@ -91,3 +91,11 @@ def test_post_without_location_needs_review(profile):
     assert verdict == "review" and flags["region"] == "unknown"
     j.description += " Fully remote, open to candidates anywhere in Latin America."
     assert evaluate(j, profile)[0] == "fit"
+
+
+def test_post_noise_filters():
+    from vigia.sources.linkedin_posts import NOT_HIRING_RE
+    for text in ("LATAM AI Talent for US Teams. Book a call.", "We help US companies hire LATAM engineers",
+                 "LATAM / EU Open to Remote Full Stack roles. Let's build something great"):
+        assert NOT_HIRING_RE.search(text), text
+    assert not NOT_HIRING_RE.search("We're Hiring: Full Stack Developer – Remote (LATAM Only) $6,000–$7,000 USD/month")

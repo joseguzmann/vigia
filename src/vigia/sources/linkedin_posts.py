@@ -37,7 +37,12 @@ HIRING_RE = re.compile(
 NOT_HIRING_RE = re.compile(
     r"open to work|#opentowork|looking for (?:a )?(?:new )?(?:job|role|opportunit)|hire me|"
     r"i am looking for (?:a )?(?:job|role|position)|available for (?:work|hire)|"
-    r"we provide|our services|i will (?:build|design|develop)|freelanc\w+ tip|buscando (?:empleo|trabajo)",
+    r"we provide|our services|i will (?:build|design|develop)|freelanc\w+ tip|buscando (?:empleo|trabajo)|"
+    # agencies selling LATAM talent rather than hiring it
+    r"book a call|schedule a call|we help (?:us )?(?:companies|teams|startups)|talent for (?:us|u\.s\.) teams|"
+    r"hire (?:top |vetted )?latam|hire with near|cost of hiring|"
+    # job seekers
+    r"open to (?:remote )?(?:\w+ )?(?:roles|opportunities|positions)|i'?m looking for (?:my next|a new)",
     re.I)
 
 
