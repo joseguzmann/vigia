@@ -83,9 +83,12 @@ def conn() -> sqlite3.Connection:
     if _conn is None:
         p = path()
         p.parent.mkdir(parents=True, exist_ok=True)
-        _conn = sqlite3.connect(p)
+        # timeout: wait for another writer (a manual `vigia run` / `reflag` while `serve`
+        # is running) instead of failing with "database is locked".
+        _conn = sqlite3.connect(p, timeout=120)
         _conn.row_factory = sqlite3.Row
         _conn.execute("PRAGMA journal_mode=WAL")
+        _conn.execute("PRAGMA busy_timeout=120000")
         _conn.executescript(SCHEMA)
     return _conn
 

@@ -64,6 +64,8 @@ def reflag() -> dict:
         if verdict != r["verdict"] or score != r["score"]:
             changed += 1
         db.update_flags(r["id"], verdict, score, f)
+        if r["id"] % 500 == 0:
+            db.commit()  # short transactions: never hold the write lock for long
     db.commit()
     from vigia.models import dedupe_key
     merged = db.merge_duplicates(lambda r: dedupe_key(r["company"], r["title"]))
