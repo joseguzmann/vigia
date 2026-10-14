@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import signal
 import time
@@ -55,7 +56,7 @@ def reflag() -> dict:
                   company=r["company"], url=r["url"], location=r["location"] or "",
                   remote=None if r["remote"] is None else bool(r["remote"]),
                   posted_at=parse_date(r["posted_at"]), description=r["description"] or "",
-                  salary=r["salary"] or "")
+                  salary=r["salary"] or "", tags=json.loads(r["tags"] or "[]"))
         verdict, score, f = flags.evaluate(job, profile)
         if verdict != r["verdict"] or score != r["score"]:
             changed += 1

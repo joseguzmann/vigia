@@ -49,6 +49,8 @@ class Himalayas(Source):
                     location=", ".join(regions) or "Worldwide", remote=True,
                     posted_at=parse_date(j.get("pubDate")),
                     description=strip_html(j.get("description")), salary=salary,
+                    # Himalayas' locationRestrictions is an explicit "only these countries".
+                    tags=["location_restricted"] if regions else [],
                 )
         return list(jobs.values())
 

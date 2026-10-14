@@ -124,6 +124,10 @@ def region(job: Job, profile: dict) -> tuple[str, str]:
     hit_loc = next((r for r in specific if r in loc), None)
     if hit_loc:
         return "ok", f"location: {hit_loc}"
+    if "location_restricted" in (job.tags or []):
+        # The board states the allowed countries explicitly; nothing in the text overrides it
+        # (A5 Talent Finders: "LATAM" in the title, "United States only" on Himalayas).
+        return "restricted", f"board restricts to: {job.location}"
     for m in RESTRICTION_RE.finditer(text):
         if not LATAM_RE.search(text[m.end():m.end() + 60]):
             return "restricted", m.group(0)

@@ -157,3 +157,11 @@ def test_company_blurb_about_latam_does_not_open_the_role(profile):
                   "We connect talent with enterprise clients across Latin America."):
         j = job(location="Brazil", description=blurb)
         assert region(j, profile)[0] == "restricted", blurb
+
+
+def test_board_location_restriction_beats_latam_title(profile):
+    # A5 Talent Finders on Himalayas: title "( LATAM )", board says "United States only".
+    j = job(title="Python Go Backend Engineer ( LATAM )", location="United States",
+            description="LATAM Python Go Backend Engineer (Remote)")
+    j.tags = ["location_restricted"]
+    assert region(j, profile)[0] == "restricted"
