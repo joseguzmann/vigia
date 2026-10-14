@@ -211,3 +211,15 @@ def test_post_naming_other_countries_is_restricted(profile):
             description="Everyone is building AI agents.")
     j.tags = ["post"]
     assert region(j, profile)[0] == "restricted"
+
+
+def test_anywhere_perk_does_not_beat_a_named_location(profile):
+    for loc, text in [("San Francisco, CA • New York, NY", "work together in real time from anywhere in the world"),
+                      ("Remote - Lithuania, Remote - North Macedonia", "Fully Remote. Work from anywhere."),
+                      ("Belfast, Northern Ireland, Remote", "fully remote, work from anywhere within NI"),
+                      ("EMEA, United States, Brazil", "Work from anywhere: Oyster has no borders")]:
+        assert region(job(location=loc, description=text), profile)[0] == "restricted", loc
+
+
+def test_anywhere_with_generic_location_is_ok(profile):
+    assert region(job(location="", description="We are open to applicants worldwide."), profile)[0] == "ok"

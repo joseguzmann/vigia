@@ -115,8 +115,12 @@ OPEN_STRONG_RE = re.compile(
     r"|anywhere\s+in\s+(?:the\s+)?"
     r"|(?:you\s+(?:are|must\s+be)\s+)?(?:based|located|living|residing)\s+(?:anywhere\s+)?in\s+(?:the\s+)?"
     r"|work\s+(?:remotely\s+)?from\s+(?:anywhere\s+in\s+)?(?:the\s+)?)" + LATAM +
-    r"|\b(?:remote|remoto)\s*[-–(,/]\s*" + LATAM +
-    r"|work\s+from\s+anywhere|anywhere\s+in\s+the\s+world|remote[ ,(-]*worldwide"
+    r"|\b(?:remote|remoto)\s*[-–(,/]\s*" + LATAM, re.I)
+# "Anywhere" phrases are mostly culture/perks copy ("our team works from anywhere in the
+# world"). They only count when the location itself is generic; a named city or country
+# beats them (Figma: "San Francisco • New York" + "work together from anywhere in the world").
+ANYWHERE_RE = re.compile(
+    r"work\s+from\s+anywhere(?!\s+(?:within|in)\b)|anywhere\s+in\s+the\s+world|remote[ ,(-]*worldwide"
     r"|open\s+to\s+(?:candidates|applicants)\s+(?:from\s+)?(?:anywhere|worldwide)", re.I)
 LATAM_RE = re.compile(r"\b" + LATAM + r"\b", re.I)
 OFFICE_RE = re.compile(r"\bhybrid\b|\bh[ií]brido\b|\bon-?site\b|\bin-office\b|\bpresencial\b", re.I)
@@ -164,6 +168,10 @@ def region(job: Job, profile: dict) -> tuple[str, str]:
     opening = OPEN_STRONG_RE.search(text)
     if opening:
         return "ok", f"text: {opening.group(0)[:80]}"
+    generic_loc = loc in GENERIC_REMOTE or any(w in loc for w in GENERIC_WORDS) or not loc
+    anywhere = ANYWHERE_RE.search(text)
+    if anywhere and generic_loc:
+        return "ok", f"text: {anywhere.group(0)[:80]}"
     if "post" in (job.tags or []):
         # Posts have no location field. A place named near the top ("Canada & US", 🇺🇸,
         # "Bangalore") ties the role to it; otherwise only an explicit opening counts.
