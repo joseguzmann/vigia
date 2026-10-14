@@ -32,7 +32,8 @@ def new_jobs(since: str | None = None, include_out: bool = False, limit: int = 6
              f"{len(rows)} new jobs: " + ", ".join(
                  f"{len(groups[v])} {VERDICT_TITLES[v].lower()}" for v in ("fit", "review", "out")), ""]
     for verdict in ("fit", "review"):
-        items = groups[verdict][:limit]
+        # Freshest first: a posting applied to in its first 48 h competes with few others.
+        items = sorted(groups[verdict], key=lambda r: (-_freshness_rank(r), -(r["score"] or 0)))[:limit]
         if not items:
             continue
         lines += [f"## {VERDICT_TITLES[verdict]} ({len(groups[verdict])})", ""]
@@ -51,6 +52,11 @@ def new_jobs(since: str | None = None, include_out: bool = False, limit: int = 6
     return "\n".join(lines)
 
 
+def _freshness_rank(r) -> int:
+    age = json.loads(r["flags"] or "{}").get("age_days")
+    return 3 if age is not None and age <= 2 else 2 if age is not None and age <= 7 else 1 if age is None else 0
+
+
 def _job_block(r) -> str:
     f = json.loads(r["flags"] or "{}")
     seen = json.loads(r["seen_in"] or "[]")
@@ -63,7 +69,11 @@ def _job_block(r) -> str:
     if r["posted_at"]:
         meta.append("posted " + _local(r["posted_at"])[:10])
     meta.append("via " + ", ".join(s["source"] for s in seen))
-    block = [f"### {r['title']} — {r['company']}  `{r['score']}`",
+    age = f.get("age_days")
+    badge = "🆕 " if age is not None and age <= 2 else ""
+    if f.get("level") and f["level"] != "unstated":
+        meta.append(f["level"])
+    block = [f"### {badge}{r['title']} — {r['company']}  `{r['score']}`",
              " · ".join(m for m in meta if m)]
     if f.get("stack"):
         block.append("stack: " + ", ".join(f["stack"]))

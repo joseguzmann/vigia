@@ -229,3 +229,13 @@ def test_us_authorization_phrasings(profile):
     for text in ("join our team as a Junior AI Engineer remotely in the US",
                  "Authorized to work in the United States without sponsorship"):
         assert region(job(location="Remote", description=text), profile)[0] == "restricted", text
+
+
+def test_title_level():
+    from vigia.flags import title_level
+    assert title_level("Senior AI Engineer") == "senior"
+    assert title_level("Junior/SemiSenior Back-End (Python) Engineer") == "mid"
+    assert title_level("Junior AI Engineer") == "junior"
+    assert title_level("Desarrollador Python Semi Senior") == "mid"
+    assert title_level("Staff Software Engineer, Backend") == "principal"
+    assert title_level("AI Engineer") == "unstated"

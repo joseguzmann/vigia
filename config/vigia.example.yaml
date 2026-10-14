@@ -56,6 +56,9 @@ profile:
   # Years of experience the candidate has. Jobs asking for more are marked "out".
   max_years: 4
 
+  # Ranking by seniority in the title (not a filter). For ~4 years, mid-level converts better.
+  level_bonus: {junior: 1, mid: 3, unstated: 1, senior: 0, lead: -2, principal: -4}
+
   # Skills the candidate has. Each one found in a posting adds to its score.
   stack:
     - python

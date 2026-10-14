@@ -187,6 +187,22 @@ def region(job: Job, profile: dict) -> tuple[str, str]:
     return "restricted", f"location: {job.location}"
 
 
+LEVELS = [("intern", r"intern|trainee|practicante|pasante"),
+          ("principal", r"principal|staff|distinguished|architect|head|director|vp"),
+          ("lead", r"lead|l[ií]der|manager"),
+          ("senior", r"senior|sr|s[eê]nior|iii"),
+          ("mid", r"mid|semi ?senior|ssr|pleno|ii\b|intermediate"),
+          ("junior", r"junior|jr|entry|graduate|associate|i\b")]
+
+
+def title_level(title: str) -> str:
+    t = vocab.normalize(title)
+    for name, pattern in LEVELS:
+        if re.search(rf"\b(?:{pattern})\b", t):
+            return name
+    return "unstated"
+
+
 def stack_hits(text: str, profile: dict) -> list[str]:
     return [s for s in profile.get("stack", []) if re.search(rf"\b{re.escape(s)}s?\b", text, re.I)]
 
@@ -251,12 +267,16 @@ def evaluate(job: Job, profile: dict) -> tuple[str, int, dict]:
         verdict = "review"
         reasons.append("no description yet")
 
+    # Seniority in the title: the profile says which levels to favour (mid-level converts
+    # better than "Senior/Staff" for a ~4-year candidate) — a ranking signal, not a filter.
+    level = title_level(job.title)
     hits = stack_hits(text, profile)
     score = len(hits) + {"ai": 3, "backend": 1}.get(category, 0) + (2 if reg == "ok" else 0)
     if years is not None and max_years is not None and years <= max_years:
         score += 1
+    score += profile.get("level_bonus", {}).get(level, 0)
 
-    flags = {"age_days": age_days, "years": years, "region": reg, "region_evidence": evidence, "category": category,
+    flags = {"age_days": age_days, "level": level, "years": years, "region": reg, "region_evidence": evidence, "category": category,
              "classic_ml": classic_ml, "llm_terms": llm_terms, "stack": hits, "reasons": reasons}
     return verdict, score, flags
 
