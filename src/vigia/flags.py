@@ -190,8 +190,8 @@ def region(job: Job, profile: dict) -> tuple[str, str]:
 LEVELS = [("intern", r"intern|trainee|practicante|pasante"),
           ("principal", r"principal|staff|distinguished|architect|head|director|vp"),
           ("lead", r"lead|l[ií]der|manager"),
-          ("senior", r"senior|sr|s[eê]nior|iii"),
           ("mid", r"mid|semi ?senior|ssr|pleno|ii\b|intermediate"),
+          ("senior", r"senior|sr|s[eê]nior|iii"),   # after "mid": "Semi Senior" is mid
           ("junior", r"junior|jr|entry|graduate|associate|i\b")]
 
 
