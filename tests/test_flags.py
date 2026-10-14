@@ -223,3 +223,9 @@ def test_anywhere_perk_does_not_beat_a_named_location(profile):
 
 def test_anywhere_with_generic_location_is_ok(profile):
     assert region(job(location="", description="We are open to applicants worldwide."), profile)[0] == "ok"
+
+
+def test_us_authorization_phrasings(profile):
+    for text in ("join our team as a Junior AI Engineer remotely in the US",
+                 "Authorized to work in the United States without sponsorship"):
+        assert region(job(location="Remote", description=text), profile)[0] == "restricted", text
