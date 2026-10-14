@@ -159,6 +159,8 @@ def upsert_job(job, verdict: str, score: int, flags: dict) -> bool:
         c.commit()
         return True
 
+    if job.tags:  # sources may add tags later (e.g. Himalayas location restrictions)
+        c.execute("UPDATE jobs SET tags = ? WHERE id = ?", (json.dumps(job.tags), row["id"]))
     seen_in = json.loads(row["seen_in"] or "[]")
     if not any(s["url"] == job.url for s in seen_in):
         seen_in.append({"source": job.source, "url": job.url})
