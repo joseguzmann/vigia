@@ -30,7 +30,7 @@ RETRIES = 2  # extra attempts after a network error (not after an HTTP error)
 
 
 def get(source: str, kind: str, url: str, *, params: dict | None = None,
-        accept_json: bool = False) -> requests.Response | None:
+        accept_json: bool = False, allow_redirects: bool = True) -> requests.Response | None:
     """GET and log it. Returns None on network errors; raises Throttled on 429.
 
     Network errors are retried: the scheduler leaves the pooled connection idle for hours,
@@ -43,7 +43,8 @@ def get(source: str, kind: str, url: str, *, params: dict | None = None,
         started = time.monotonic()
         status = 0
         try:
-            resp = _session.get(url, params=params, timeout=TIMEOUT, headers=headers)
+            resp = _session.get(url, params=params, timeout=TIMEOUT, headers=headers,
+                                allow_redirects=allow_redirects)
             status = resp.status_code
         except requests.RequestException:
             resp = None
@@ -54,7 +55,7 @@ def get(source: str, kind: str, url: str, *, params: dict | None = None,
 
     if status == 429:
         raise Throttled(f"{source}: 429 on {kind}")
-    if resp is None or status >= 400:
+    if resp is None or status >= 300:
         return None
     return resp
 

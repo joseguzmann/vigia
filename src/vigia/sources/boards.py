@@ -1,8 +1,10 @@
-"""Remote job boards with public JSON APIs: Remotive, Himalayas, Jobicy."""
+"""Remote job boards with public feeds: Remotive, Himalayas, Jobicy, Working Nomads, We Work Remotely."""
 
 from __future__ import annotations
 
 import ast
+import re
+import xml.etree.ElementTree as ET
 
 from vigia import http
 from vigia.models import Job
@@ -86,3 +88,58 @@ def _as_list(value) -> list[str]:
         except (ValueError, SyntaxError):
             return [value]
     return [str(value)] if value else []
+
+
+class WorkingNomads(Source):
+    name = "workingnomads"
+
+    def fetch(self) -> list[Job]:
+        data = http.get_json(self.name, "list", "https://www.workingnomads.com/api/exposed_jobs/")
+        out = []
+        for j in data or []:
+            out.append(Job(
+                source=self.name, source_id=j.get("url", ""), title=j.get("title", ""),
+                company=j.get("company_name", ""), url=j.get("url", ""),
+                location=j.get("location") or "", remote=True,
+                posted_at=parse_date(j.get("pub_date")),
+                description=strip_html(j.get("description")),
+                tags=[t.strip() for t in (j.get("tags") or "").split(",") if t.strip()],
+            ))
+        return out
+
+
+class WeWorkRemotely(Source):
+    """RSS per category. Titles come as "Company: Role"."""
+    name = "weworkremotely"
+    CATEGORIES = ["remote-back-end-programming-jobs", "remote-full-stack-programming-jobs",
+                  "remote-devops-sysadmin-jobs", "remote-programming-jobs"]
+
+    def fetch(self) -> list[Job]:
+        out = {}
+        for cat in self.cfg.get("categories", self.CATEGORIES):
+            resp = http.get(self.name, cat, f"https://weworkremotely.com/categories/{cat}.rss")
+            if resp is None:
+                continue
+            try:
+                root = ET.fromstring(resp.content)
+            except ET.ParseError:
+                continue
+            for item in root.iter("item"):
+                raw = item.findtext("title") or ""
+                company, _, title = raw.partition(": ")
+                url = item.findtext("link") or ""
+                out[url] = Job(
+                    source=self.name, source_id=url, title=title or raw, company=company if title else "",
+                    url=url, location=item.findtext("region") or "", remote=True,
+                    posted_at=_rss_date(item.findtext("pubDate")),
+                    description=strip_html(item.findtext("description")),
+                )
+        return list(out.values())
+
+
+def _rss_date(value):
+    from email.utils import parsedate_to_datetime
+    try:
+        return parsedate_to_datetime(value) if value else None
+    except (TypeError, ValueError):
+        return None

@@ -1,0 +1,48 @@
+# Role vocabulary: the words that put a job title in scope, and the searches built from them.
+#
+# Matching is done on normalized text: lowercase, no accents, and hyphens / slashes / dots
+# turned into spaces. So "Full-Stack", "full stack" and "Fullstack" are the same thing, and
+# a two-word term also matches written together ("back end" → "backend").
+#
+# Families group synonyms in English, Spanish and Portuguese. The profile chooses which
+# families it wants (`profile.role_families`). `search` lists the phrases sent to search
+# engines (LinkedIn job search, hiring-post discovery): fewer, higher-yield phrasings.
+
+families:
+  ai:
+    en: [ai engineer, ai developer, ai software engineer, ai product engineer, ml engineer,
+         machine learning engineer, llm, llm engineer, genai, gen ai, generative ai,
+         ai agent, ai agents, agentic, agent engineer, agents engineer, applied ai,
+         conversational ai, ai automation, automation engineer ai, nlp engineer,
+         prompt engineer, ai platform engineer, ai solutions engineer, ai integration,
+         forward deployed, deployed engineer, ai backend, ai full stack, ai harness]
+    es: [ingeniero de ia, ingeniero ia, ingeniero en ia, desarrollador ia, desarrollador de ia,
+         ingeniero de inteligencia artificial, desarrollador de inteligencia artificial,
+         especialista en ia, ingeniero de machine learning, agentes de ia, agentes ia,
+         ia generativa, programador ia]
+    pt: [engenheiro de ia, engenheiro ia, desenvolvedor ia, desenvolvedor de ia,
+         engenheiro de inteligencia artificial, ia generativa, engenheiro de machine learning,
+         agentes de ia]
+  backend:
+    en: [backend, back end, backend engineer, backend developer, api engineer, api developer,
+         python developer, python engineer, django, fastapi, flask, software engineer,
+         software developer, platform engineer, integration engineer, integrations engineer,
+         node engineer, node developer, typescript engineer, product engineer]
+    es: [desarrollador backend, ingeniero backend, programador backend, programador python,
+         desarrollador python, ingeniero de software, desarrollador de software,
+         ingeniero de desarrollo, desarrollador node]
+    pt: [desenvolvedor backend, engenheiro backend, engenheiro de software,
+         desenvolvedor de software, desenvolvedor python, programador python]
+  fullstack:
+    en: [full stack, full stack engineer, full stack developer, web app engineer]
+    es: [desarrollador full stack, ingeniero full stack, programador full stack]
+    pt: [desenvolvedor full stack, engenheiro full stack]
+
+# Phrases sent to search engines. Kept short and in the way recruiters write titles.
+search:
+  ai: [AI Engineer, LLM Engineer, Agentic AI Engineer, Applied AI Engineer,
+       Generative AI Engineer, AI Agent Engineer, Conversational AI Engineer,
+       Forward Deployed Engineer, AI Automation Engineer, Ingeniero de IA]
+  backend: [Python Backend Engineer, Backend Engineer, Django Developer, FastAPI Developer,
+            Desarrollador Backend Python, Software Engineer Python]
+  fullstack: [Full Stack Engineer AI, Full Stack Developer Python]

@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from vigia import config, db, flags, http
+from vigia.linkedin_guest import Blocked
 from vigia.sources import REGISTRY
 
 log = logging.getLogger("vigia")
@@ -33,6 +34,8 @@ def run_source(name: str) -> dict:
                 new += 1
     except http.Throttled as e:
         error = f"throttled: {e}"
+    except Blocked as e:
+        error = f"skipped: {e}"
     except Exception as e:  # one broken source must not stop the others
         log.exception("source %s failed", name)
         error = f"{type(e).__name__}: {e}"

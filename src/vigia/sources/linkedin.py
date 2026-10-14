@@ -15,13 +15,12 @@ No account, cookie or login is ever used.
 
 from __future__ import annotations
 
-import random
 import re
-import time
 
 from bs4 import BeautifulSoup
 
-from vigia import config, db, http
+from vigia import config, db, vocab
+from vigia.linkedin_guest import Blocked, Guest
 from vigia.flags import region, title_in_scope
 from vigia.models import Job
 from vigia.sources.base import Source, parse_date
@@ -36,27 +35,36 @@ class LinkedIn(Source):
     name = "linkedin"
 
     def fetch(self) -> list[Job]:
-        queries = self.cfg.get("queries") or []
+        queries = self.cfg.get("queries") or [
+            {"keywords": phrase, **loc}
+            for phrase in vocab.search_phrases(self.cfg.get("families"))
+            for loc in self.cfg.get("locations", [{"location": "Ecuador"}])]
         if not queries:
             return []
+        guest = Guest(self.name)
+        guest.check()  # in cooldown: do not even advance the rotation
         i = int(db.get_state("linkedin.cursor", "0")) % len(queries)
-        db.set_state("linkedin.cursor", str(i + 1))
         q = queries[i]
 
         cards: list[Job] = []
         for page in range(PAGES):
-            resp = http.get(self.name, "search", SEARCH, params={
+            try:
+                resp = guest.get("search", SEARCH, params={
                 "keywords": q["keywords"], "location": q.get("location", ""),
                 "f_TPR": f"r{int(self.cfg.get('hours_old', 48)) * 3600}",
                 "f_WT": q.get("work_type", ""),  # "2" = remote
                 "start": page * 10})
+            except Blocked:
+                if not cards:
+                    raise
+                break
             if resp is None:
                 break
             page_cards = parse_cards(resp.text)
             cards += page_cards
             if len(page_cards) < 10:
                 break
-            self._pause()
+        db.set_state("linkedin.cursor", str(i + 1))  # this query was served; move on
 
         # Spend description requests only on cards that could be a fit and are new to us.
         profile = config.profile()
@@ -65,18 +73,13 @@ class LinkedIn(Source):
                  and title_in_scope(c.title, profile)[0]
                  and region(c, profile)[0] != "restricted"]
         for card in worth[: int(self.cfg.get("max_descriptions", 8))]:
-            self._pause()
             try:
-                resp = http.get(self.name, "posting", POSTING.format(card.source_id))
-            except http.Throttled:
+                resp = guest.get("posting", POSTING.format(card.source_id))
+            except Blocked:
                 break  # keep the cards we have; descriptions can come on a later run
             if resp is not None:
                 card.description = parse_description(resp.text)
         return cards
-
-    def _pause(self) -> None:
-        low, high = self.cfg.get("pause_seconds", [6, 12])
-        time.sleep(random.uniform(low, high))
 
 
 def parse_cards(html_text: str) -> list[Job]:

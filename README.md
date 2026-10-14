@@ -64,7 +64,19 @@ verdict, so the person only reads what survives.
 | `greenhouse`, `ashby`, `lever` | Career pages of companies you choose to watch | public APIs |
 | `remotive`, `himalayas`, `jobicy` | Remote job boards | public APIs |
 | `hn_whoishiring` | Hacker News monthly "Who is hiring?" thread | Algolia HN API |
+| `workingnomads`, `weworkremotely` | Remote job boards | JSON API / RSS |
+| `strider` | LATAM-only marketplace; each role lists its accepted countries | job pages (schema.org) |
 | `linkedin` | LinkedIn's logged-out job search (optional, off by default) | public pages, rate-limited |
+| `linkedin_posts` | LinkedIn **hiring posts**, found via Google's index (Serper), read logged-out | Serper API key + public pages |
+
+All LinkedIn traffic goes through one guest client (`linkedin_guest.py`): no login, a per-run
+request budget, and a cooldown shared by every LinkedIn source after a 429. The idea and
+several measurements come from [linkedin-scraper](https://github.com/moeezahmadkhan/linkedin-scraper) (MIT).
+
+Titles are matched against `config/vocabulary.yaml`: role families with synonyms in English,
+Spanish and Portuguese, on normalized text (accents, hyphens and slashes ignored), so
+"Full-Stack", "fullstack" and "Desarrollador Full Stack" all count. The same file generates
+the search phrases sent to LinkedIn and Serper.
 
 Adding a source is one file: subclass `Source`, return `Job` objects, register it.
 
@@ -72,6 +84,7 @@ Adding a source is one file: subclass `Source`, return `Job` objects, register i
 
 ```bash
 cp config/vigia.example.yaml config/vigia.yaml   # then edit your profile
+echo 'SERPER_API_KEY=...' > .env                    # only for linkedin_posts
 python -m venv .venv && .venv/bin/pip install -e ".[dev]"
 
 .venv/bin/vigia run          # run every enabled source once

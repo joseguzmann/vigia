@@ -7,6 +7,7 @@ A source receives its own config block (`sources.<name>` in vigia.yaml).
 from __future__ import annotations
 
 import html
+import json
 import re
 from datetime import datetime, timezone
 
@@ -49,3 +50,24 @@ def parse_date(value) -> datetime | None:
         return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
     except (ValueError, OSError, OverflowError):
         return None
+
+
+def job_posting_ld(html_text: str) -> dict | None:
+    """The schema.org JobPosting embedded in a job page, if any, with countries flattened.
+
+    Many boards embed it for Google Jobs. `applicantLocationRequirements` is the
+    authoritative list of countries a remote role accepts, when present.
+    """
+    for m in re.finditer(r'<script[^>]*application/ld\+json[^>]*>(.*?)</script>', html_text or "", re.S):
+        try:
+            data = json.loads(m.group(1))
+        except ValueError:
+            continue
+        nodes = data if isinstance(data, list) else data.get("@graph", [data])
+        for node in nodes:
+            if isinstance(node, dict) and node.get("@type") == "JobPosting":
+                req = node.get("applicantLocationRequirements") or []
+                req = req if isinstance(req, list) else [req]
+                node["_countries"] = [r.get("name") for r in req if isinstance(r, dict) and r.get("name")]
+                return node
+    return None

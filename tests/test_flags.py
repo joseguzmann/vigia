@@ -165,3 +165,49 @@ def test_board_location_restriction_beats_latam_title(profile):
             description="LATAM Python Go Backend Engineer (Remote)")
     j.tags = ["location_restricted"]
     assert region(j, profile)[0] == "restricted"
+
+
+# --- vocabulary --------------------------------------------------------------------
+
+def test_hyphenated_and_glued_titles_are_in_scope(profile):
+    from vigia.flags import title_in_scope
+    for title in ("Web App Full-Stack Engineer", "Senior Fullstack Developer", "Back-End Developer",
+                  "Desarrollador Full-Stack AI Native", "Engenheiro de IA Sênior",
+                  "Ingeniero de Inteligencia Artificial", "AI Harness Engineer"):
+        assert title_in_scope(title, profile)[0], title
+
+
+def test_excluded_titles_still_out(profile):
+    from vigia.flags import title_in_scope
+    for title in ("Senior .NET Developer", "Account Executive", "iOS Engineer", "Software Engineering Intern"):
+        assert not title_in_scope(title, profile)[0], title
+
+
+def test_normalize():
+    from vigia.vocab import normalize
+    assert normalize("Full-Stack/Back-End Ingeniería") == "full stack back end ingenieria"
+
+
+def test_company_board_postings_age_more_slowly(profile):
+    j = job(description="LATAM. Python.", days_old=90)
+    j.source = "ashby"
+    assert evaluate(j, profile)[0] != "out"
+    j.source = "himalayas"
+    assert evaluate(j, profile)[0] == "out"
+
+
+def test_country_list_without_home_country_is_restricted(profile):
+    # Strider: "LATAM" = Argentina, Brazil, Colombia, Mexico... but not Ecuador.
+    j = job(location="LATAM: Argentina, Brazil, Colombia, Mexico", description="Remote LATAM.")
+    j.tags = ["countries:Argentina,Brazil,Colombia,Mexico"]
+    assert region(j, {**profile, "home_country": "Ecuador"})[0] == "restricted"
+    j.tags = ["countries:Argentina,Ecuador,Peru"]
+    assert region(j, {**profile, "home_country": "Ecuador"})[0] == "ok"
+
+
+def test_post_naming_other_countries_is_restricted(profile):
+    from vigia.models import Job
+    j = job(title="🚨 HIRING: Applied AI Engineers | Canada & US | Remote 🇨🇦 🇺🇸", location="",
+            description="Everyone is building AI agents.")
+    j.tags = ["post"]
+    assert region(j, profile)[0] == "restricted"

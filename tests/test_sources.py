@@ -51,3 +51,43 @@ def test_hn_comment():
     assert job.title == "Backend Software Engineer"
     assert job.location == "Remote (Global)"
     assert job.remote is True
+
+
+def test_getonbrd_reads_countries_from_page(monkeypatch):
+    from vigia import http
+
+    class Page:
+        text = "<p>Position is 100% remote, but candidates must reside in Argentina, Peru, Mexico or Costa Rica.</p>"
+
+    monkeypatch.setattr(http, "get", lambda *a, **k: Page())
+    assert GetOnBoard({}).countries("https://x") == ["Argentina", "Peru", "Mexico", "Costa Rica"]
+
+
+def test_activity_id_carries_the_date():
+    from vigia.sources.linkedin_posts import activity_date
+    d = activity_date("https://www.linkedin.com/posts/x_hiring-activity-7515061885470179328-FLl-")
+    assert d.isoformat().startswith("2026-10-11T14:52")
+
+
+def test_post_parse_and_intent():
+    from vigia.sources.linkedin_posts import HIRING_RE, NOT_HIRING_RE, parse_post
+    html = ('<script type="application/ld+json">{"@type":"SocialMediaPosting","headline":"HIRING: AI Engineer | Remote LATAM",'
+            '"articleBody":"We are looking for an AI engineer with LangGraph. Remote, LATAM.","author":{"name":"Ana"},'
+            '"datePublished":"2026-10-11T14:52:56.593Z"}</script>')
+    post = parse_post(html)
+    assert post["author"] == "Ana" and "LangGraph" in post["body"]
+    assert HIRING_RE.search(post["headline"]) and not NOT_HIRING_RE.search(post["body"])
+    assert NOT_HIRING_RE.search("I'm open to work as an AI engineer #OpenToWork")
+
+
+def test_post_without_location_needs_review(profile):
+    from datetime import datetime, timezone
+    from vigia.flags import evaluate
+    from vigia.models import Job
+    j = Job(source="linkedin_posts", source_id="1", title="We're hiring!", company="Ana", url="https://x",
+            description="Looking for an AI Engineer with Python and LangGraph, 3+ years of experience.",
+            posted_at=datetime.now(timezone.utc), tags=["post"])
+    verdict, _, flags = evaluate(j, profile)
+    assert verdict == "review" and flags["region"] == "unknown"
+    j.description += " Fully remote, open to candidates anywhere in Latin America."
+    assert evaluate(j, profile)[0] == "fit"

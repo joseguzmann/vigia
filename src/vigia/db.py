@@ -159,8 +159,11 @@ def upsert_job(job, verdict: str, score: int, flags: dict) -> bool:
         c.commit()
         return True
 
-    if job.tags:  # sources may add tags later (e.g. Himalayas location restrictions)
+    if job.tags:  # sources may add tags later (e.g. Himalayas restrictions, country lists)
         c.execute("UPDATE jobs SET tags = ? WHERE id = ?", (json.dumps(job.tags), row["id"]))
+    if any(t.startswith("countries:") for t in job.tags or []):
+        c.execute("UPDATE jobs SET location = ?, verdict = ?, score = ?, flags = ? WHERE id = ?",
+                  (job.location, verdict, score, json.dumps(flags), row["id"]))
     seen_in = json.loads(row["seen_in"] or "[]")
     if not any(s["url"] == job.url for s in seen_in):
         seen_in.append({"source": job.source, "url": job.url})
@@ -192,6 +195,21 @@ def known_keys(keys: list[str]) -> set[str]:
         return set()
     marks = ",".join("?" * len(keys))
     rows = conn().execute(f"SELECT dedupe_key FROM jobs WHERE dedupe_key IN ({marks})", keys)
+    return {r["dedupe_key"] for r in rows}
+
+
+def known_source_ids(source: str, ids: list[str]) -> set[str]:
+    if not ids:
+        return set()
+    marks = ",".join("?" * len(ids))
+    rows = conn().execute(f"SELECT source_id FROM jobs WHERE source = ? AND source_id IN ({marks})",
+                          [source, *ids])
+    return {r["source_id"] for r in rows}
+
+
+def keys_needing_countries() -> set[str]:
+    """Get on Board roles stored before we read their country list."""
+    rows = conn().execute("SELECT dedupe_key FROM jobs WHERE location LIKE '%unspecified%'")
     return {r["dedupe_key"] for r in rows}
 
 

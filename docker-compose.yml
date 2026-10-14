@@ -4,12 +4,17 @@ services:
     image: vigia:latest
     container_name: vigia
     restart: unless-stopped
+    env_file:
+      # SERPER_API_KEY and other secrets (git-ignored). Optional.
+      - path: ./.env
+        required: false
     environment:
       TZ: ${TZ:-America/Guayaquil}
     volumes:
       - vigia-data:/data
       # Your personal config (git-ignored). Falls back to the example inside the image.
       - ./config/vigia.yaml:/app/config/vigia.yaml:ro
+      - ./config/vocabulary.yaml:/app/config/vocabulary.yaml:ro
 
 volumes:
   vigia-data:

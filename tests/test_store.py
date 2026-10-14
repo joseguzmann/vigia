@@ -64,3 +64,22 @@ def test_network_error_is_retried(monkeypatch):
     assert http.get("t", "k", "https://x") is not None
     statuses = [r["status"] for r in db.conn().execute("SELECT status FROM requests ORDER BY rowid")]
     assert statuses == [0, 200]
+
+
+def test_linkedin_cooldown_is_shared_and_blocks_requests(monkeypatch):
+    import pytest
+    from vigia import http
+    from vigia.linkedin_guest import Blocked, Guest
+
+    def throttled(*a, **k):
+        raise http.Throttled("429")
+
+    monkeypatch.setattr(http, "get", throttled)
+    g = Guest("linkedin")
+    with pytest.raises(Blocked):
+        g.get("search", "https://x")
+    calls = []
+    monkeypatch.setattr(http, "get", lambda *a, **k: calls.append(1))
+    with pytest.raises(Blocked):           # a different source, same cooldown
+        Guest("linkedin_posts").get("post", "https://y")
+    assert calls == []                      # nothing was sent during the cooldown

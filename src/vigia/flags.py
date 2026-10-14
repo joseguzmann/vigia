@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
+from vigia import vocab
 from vigia.models import Job
 
 WORD_NUMBERS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
@@ -54,12 +55,25 @@ BACKEND_TITLE_RE = re.compile(r"\b(backend|back-end|python|django|fastapi|softwa
                               r"platform|full ?stack|api)\b", re.I)
 
 
+COMPANY_BOARDS = {"greenhouse", "ashby", "lever"}
+
+
 def title_in_scope(title: str, profile: dict) -> tuple[bool, str]:
-    t = title.lower()
-    for word in profile.get("title_exclude", []):
-        if _contains_term(t, word):
-            return False, f"title excluded ({word})"
-    if any(_contains_term(t, w) for w in profile.get("title_include", [])):
+    """In scope if the title contains a term from the profile's role families
+    (config/vocabulary.yaml) or from `title_include`, and nothing from `title_exclude`.
+    Matching is on normalized text, so "Full-Stack" = "full stack" = "fullstack"."""
+    excluded = set()
+    for w in profile.get("title_exclude", []):
+        excluded |= vocab.variants(w)
+    hit = vocab.match(title, excluded)
+    if hit:
+        return False, f"title excluded ({hit})"
+    terms = set()
+    for fam_terms in vocab.family_terms(profile.get("role_families")).values():
+        terms |= fam_terms
+    for w in profile.get("title_include", []):
+        terms |= vocab.variants(w)
+    if vocab.match(title, terms):
         return True, ""
     return False, "title out of scope"
 
@@ -108,6 +122,11 @@ LATAM_RE = re.compile(r"\b" + LATAM + r"\b", re.I)
 OFFICE_RE = re.compile(r"\bhybrid\b|\bh[ií]brido\b|\bon-?site\b|\bin-office\b|\bpresencial\b", re.I)
 GENERIC_REMOTE = {"", "remote", "remote job", "anywhere", "worldwide", "global", "fully remote",
                   "remote, global", "remote, global (remote)", "remote (global)", "worldwide (remote)"}
+POST_PLACE_RE = re.compile(
+    r"\b(?:us|usa|u\.s\.|united states|canada|uk|united kingdom|europe|emea|india|pakistan|"
+    r"philippines|australia|germany|london|new york|nyc|san francisco|sf bay|bangalore|bengaluru|"
+    r"hyderabad|pune|chennai|mumbai|delhi|noida|gurgaon|gurugram|dubai|singapore)\b|🇺🇸|🇨🇦|🇮🇳|🇬🇧|🇪🇺",
+    re.I)
 GENERIC_WORDS = {"worldwide", "anywhere", "global"}
 
 
@@ -121,6 +140,15 @@ def region(job: Job, profile: dict) -> tuple[str, str]:
     office = OFFICE_RE.search(f"{job.title} {job.location}")
     if office:
         return "restricted", f"office-bound: {office.group(0)}"
+    # An explicit country list from the source (Strider, Get on Board) is authoritative:
+    # "LATAM" there often means 9 countries, and Ecuador is not always one of them.
+    countries = next((t[len("countries:"):] for t in (job.tags or []) if t.startswith("countries:")), None)
+    home = (profile.get("home_country") or "").lower()
+    if countries is not None and home:
+        listed = [c.strip().lower() for c in countries.split(",") if c.strip()]
+        if listed:
+            return (("ok", f"{profile['home_country']} is in the accepted countries") if home in listed
+                    else ("restricted", f"accepted countries exclude {profile['home_country']}: {countries[:80]}"))
     hit_loc = next((r for r in specific if r in loc), None)
     if hit_loc:
         return "ok", f"location: {hit_loc}"
@@ -136,6 +164,13 @@ def region(job: Job, profile: dict) -> tuple[str, str]:
     opening = OPEN_STRONG_RE.search(text)
     if opening:
         return "ok", f"text: {opening.group(0)[:80]}"
+    if "post" in (job.tags or []):
+        # Posts have no location field. A place named near the top ("Canada & US", 🇺🇸,
+        # "Bangalore") ties the role to it; otherwise only an explicit opening counts.
+        place = POST_PLACE_RE.search(f"{job.title}\n{job.description[:600]}")
+        if place:
+            return "restricted", f"post names {place.group(0)}"
+        return "unknown", "the post does not say where it hires"
     if loc in GENERIC_REMOTE or any(w in loc for w in GENERIC_WORDS):
         return ("ok", "remote, no restriction stated") if job.remote is not False else ("unknown", "")
     if "unspecified" in loc:
@@ -153,7 +188,9 @@ def evaluate(job: Job, profile: dict) -> tuple[str, int, dict]:
     reasons: list[str] = []
     verdict = "fit"
 
-    in_scope, why = title_in_scope(job.title, profile)
+    is_post = "post" in (job.tags or [])
+    # A post's "title" is just its first line; the role is usually named a little further in.
+    in_scope, why = title_in_scope(f"{job.title} {job.description[:400]}" if is_post else job.title, profile)
     if not in_scope:
         verdict = "out"
         reasons.append(why)
@@ -191,7 +228,9 @@ def evaluate(job: Job, profile: dict) -> tuple[str, int, dict]:
     else:
         category = "other"
 
-    max_age = profile.get("max_age_days")
+    # A posting still on a company's own board is still open; aggregators keep dead ones.
+    max_age = (profile.get("max_age_days_boards", 120) if job.source in COMPANY_BOARDS
+               else profile.get("max_age_days"))
     age_days = None
     if job.posted_at is not None:
         age_days = (datetime.now(timezone.utc) - job.posted_at).days
@@ -219,8 +258,3 @@ def _to_int(s: str | None) -> int | None:
     return int(s) if s.isdigit() else WORD_NUMBERS.get(s.lower())
 
 
-def _contains_term(text: str, term: str) -> bool:
-    term = term.lower()
-    if re.fullmatch(r"[a-z0-9 ]+", term):
-        return re.search(rf"\b{re.escape(term)}\b", text) is not None
-    return term in text

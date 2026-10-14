@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from vigia import http
+import re
+
+from vigia import db, http
 from vigia.models import Job
 from vigia.sources.base import Source, parse_date, strip_html
 
@@ -21,7 +23,27 @@ class GetOnBoard(Source):
                 job = self.to_job(item)
                 if job:
                     jobs[job.source_id] = job
+        # "Locally remote" roles name their countries only on the job page. Read it once,
+        # for roles we have not stored yet.
+        known = db.known_keys([j.dedupe_key for j in jobs.values()]) - db.keys_needing_countries()
+        for job in jobs.values():
+            if job.remote is False and job.dedupe_key not in known:
+                countries = self.countries(job.url)
+                if countries:
+                    job.location = "Remote in: " + ", ".join(countries)
+                    job.tags.append("countries:" + ",".join(countries))
         return list(jobs.values())
+
+    def countries(self, url: str) -> list[str]:
+        """'Position is 100% remote, but candidates must reside in Argentina, Peru, Mexico or Costa Rica.'"""
+        resp = http.get(self.name, "job", url)
+        if resp is None:
+            return []
+        text = re.sub(r"<[^>]+>", " ", resp.text)
+        m = re.search(r"must reside in ([^.<]{2,200})\.", text) or re.search(r"deben residir en ([^.<]{2,200})\.", text)
+        if not m:
+            return []
+        return [c.strip() for c in re.split(r",|\bor\b|\bo\b|\by\b|\band\b", m.group(1)) if c.strip()]
 
     def to_job(self, item: dict) -> Job | None:
         a = item.get("attributes", {})
@@ -46,7 +68,7 @@ class GetOnBoard(Source):
             company=company,
             url=(item.get("links") or {}).get("public_url", ""),
             location=location,
-            remote=modality == "fully_remote",
+            remote=modality == "fully_remote",  # False = remote within some countries
             posted_at=parse_date(a.get("published_at")),
             description=description,
             salary=salary,

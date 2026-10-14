@@ -3,29 +3,10 @@
 # flagged and ranked, so you can change it later without collecting again.
 
 profile:
-  # Titles worth collecting. Broad on purpose: ranking happens later.
-  title_include:
-    - ai engineer
-    - ml engineer
-    - llm
-    - genai
-    - generative ai
-    - ai agent
-    - agentic
-    - agent engineer
-    - applied ai
-    - conversational ai
-    - ai automation
-    - forward deployed
-    - backend
-    - back-end
-    - python
-    - django
-    - fastapi
-    - software engineer
-    - platform engineer
-    - full stack
-    - fullstack
+  # Role families from config/vocabulary.yaml (synonyms in EN/ES/PT, normalized matching).
+  role_families: [ai, backend, fullstack]
+  # Extra title terms on top of the families, if any.
+  title_include: []
   # Titles that are never what we want, even if they match above.
   title_exclude:
     - intern
@@ -48,6 +29,10 @@ profile:
     - head of
     - insurance agent
 
+  # Country the candidate lives in. When a source lists the exact countries a remote role
+  # accepts, the role is eligible only if this country is on the list.
+  home_country: Ecuador
+
   # Where the candidate can work from. A job is eligible if its location or text
   # mentions one of these, or if it is remote with no stated restriction.
   eligible_regions:
@@ -65,6 +50,8 @@ profile:
 
   # Postings older than this are stale: often filled, or ghost listings.
   max_age_days: 45
+  # Company boards (Greenhouse/Ashby/Lever) only list open roles, so allow more.
+  max_age_days_boards: 120
 
   # Years of experience the candidate has. Jobs asking for more are marked "out".
   max_years: 4
@@ -124,6 +111,27 @@ sources:
   hn_whoishiring:
     enabled: true
     every_minutes: 720
+  strider:
+    # LATAM-only marketplace. Each role lists its countries; check that yours is there.
+    enabled: true
+    every_minutes: 720
+  workingnomads:
+    enabled: true
+    every_minutes: 360
+  weworkremotely:
+    enabled: true
+    every_minutes: 360
+  linkedin_posts:
+    # Hiring posts found through Serper (Google's index), read logged-out.
+    # Needs SERPER_API_KEY in .env. Each run spends `queries_per_run` Serper credits.
+    enabled: false
+    every_minutes: 720
+    queries_per_run: 6
+    posted_within_days: 14
+    freshness: qdr:w
+    families: [ai, backend, fullstack]
+    templates:
+      - 'site:linkedin.com/posts hiring "{phrase}" remote'
   linkedin:
     # Optional. Uses LinkedIn's public (logged-out) job search, one query per run,
     # and fetches only the descriptions of jobs that pass the title/location filter.
@@ -133,6 +141,9 @@ sources:
     hours_old: 48
     max_descriptions: 8
     pause_seconds: [6, 12]
+    # After a 429 every LinkedIn source waits this long (measured: ~3 h).
+    cooldown_minutes: 200
+    request_budget: 12
     queries:
       - {keywords: AI Engineer, location: Ecuador}
       - {keywords: LLM Engineer, location: Latin America}
