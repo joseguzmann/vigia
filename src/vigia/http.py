@@ -26,19 +26,31 @@ class Throttled(Exception):
     """The remote side said 429. Callers should stop for this tick."""
 
 
+RETRIES = 2  # extra attempts after a network error (not after an HTTP error)
+
+
 def get(source: str, kind: str, url: str, *, params: dict | None = None,
         accept_json: bool = False) -> requests.Response | None:
-    """GET and log it. Returns None on network errors; raises Throttled on 429."""
-    started = time.monotonic()
-    status = 0
-    try:
-        resp = _session.get(url, params=params, timeout=TIMEOUT,
-                            headers={"Accept": "application/json"} if accept_json else None)
-        status = resp.status_code
-    except requests.RequestException:
-        resp = None
-    finally:
+    """GET and log it. Returns None on network errors; raises Throttled on 429.
+
+    Network errors are retried: the scheduler leaves the pooled connection idle for hours,
+    the server closes it, and the first request of the next run would otherwise fail
+    (seen on 2026-10-14: the first request of every source failed with status 0).
+    """
+    headers = {"Accept": "application/json"} if accept_json else None
+    resp, status = None, 0
+    for attempt in range(RETRIES + 1):
+        started = time.monotonic()
+        status = 0
+        try:
+            resp = _session.get(url, params=params, timeout=TIMEOUT, headers=headers)
+            status = resp.status_code
+        except requests.RequestException:
+            resp = None
         db.log_request(source, kind, status, int((time.monotonic() - started) * 1000))
+        if status != 0:
+            break
+        time.sleep(2 * (attempt + 1))
 
     if status == 429:
         raise Throttled(f"{source}: 429 on {kind}")
