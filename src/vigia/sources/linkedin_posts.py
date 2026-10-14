@@ -42,7 +42,7 @@ NOT_HIRING_RE = re.compile(
     r"book a call|schedule a call|we help (?:us )?(?:companies|teams|startups)|talent for (?:us|u\.s\.) teams|"
     r"hire (?:top |vetted )?latam|hire with near|cost of hiring|"
     # job seekers
-    r"open to (?:remote )?(?:\w+ )?(?:roles|opportunities|positions)|i'?m looking for (?:my next|a new)",
+    r"open to (?:remote )?(?:[\w-]+ ){0,3}(?:roles|opportunities|positions)|i'?m looking for (?:my next|a new)",
     re.I)
 
 
