@@ -42,18 +42,43 @@
 
   <aside>
     <h2>Act</h2>
-    <form method="post" action="/jobs/{{ job.id }}/actions" class="action">
-      <input type="hidden" name="action" value="applied">
+    {% if job.applications %}
+    <h3>Applied</h3>
+    <ul class="history">
+      {% for ap in job.applications %}
+      <li><a href="/applications/{{ ap.id }}">#{{ ap.number }}</a> · {{ ap.applied_at or "not sent" }} ·
+        <span class="act applied">{{ ap.status }}</span>{% if ap.variant %} · {{ ap.variant }}{% endif %}{% if ap.cv %} · {{ ap.cv }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <form method="post" action="/jobs/{{ job.id }}/apply" class="action">
       <input type="hidden" name="back" value="{{ back }}">
       <h3>Applied</h3>
+      <p class="muted small">This will be #{{ next.number }}: the rotation gives it <strong>{{ next.variant }}</strong>.</p>
       <label>Variant
-        <input name="variant" list="variants" required placeholder="A1 or A2">
-        <datalist id="variants">{% for v in variants %}<option value="{{ v }}">{% endfor %}</datalist>
+        <select name="variant">
+          {% for v in variants %}<option value="{{ v }}" {% if v == next.variant %}selected{% endif %}>{{ v }}</option>{% endfor %}
+          <option value="">not in the experiment</option>
+        </select>
       </label>
+      <label>Family
+        <select name="family"><option value=""></option>
+          {% for f in families %}<option value="{{ f }}" {% if f == job.category %}selected{% endif %}>{{ f }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Channel
+        <select name="channel">{% for ch in channels %}<option value="{{ ch }}">{{ ch }}</option>{% endfor %}</select>
+      </label>
+      <label>CV sent <input name="cv" placeholder="ai-ended"></label>
+      <label>Written for it <input name="material" placeholder="letter, 2 questions..."></label>
       <label class="check"><input type="checkbox" name="extra" value="1" {% if job.verdict == "extra" %}checked{% endif %}> visa / relocation role</label>
-      <label>Note <input name="note"></label>
+      <label>Status
+        <select name="status"><option value="applied">applied</option><option value="preparing">preparing</option></select>
+      </label>
+      <label>Notes <input name="notes"></label>
       <button type="submit">Record application</button>
     </form>
+    {% endif %}
 
     <form method="post" action="/jobs/{{ job.id }}/actions" class="action">
       <input type="hidden" name="action" value="skipped">
@@ -83,20 +108,9 @@
       <li>
         <span class="act {{ a.action }}">{{ a.action }}</span>
         {{ a.ts|local }}
-        {% if a.variant %}· {{ a.variant }}{% endif %}
-        {% if a.extra %}· visa/relocation{% endif %}
         {% if a.reason %}· {{ a.reason }}{% endif %}
         {% if a.age_days is not none %}· {{ a.age_days }}d old{% endif %}
         {% if a.note %}<div class="muted">{{ a.note }}</div>{% endif %}
-        {% if a.action == "applied" %}
-        <form method="post" action="/actions/{{ a.id }}/outcome" class="inline">
-          <input type="hidden" name="next" value="/jobs/{{ job.id }}?back={{ back|urlencode }}">
-          <select name="outcome">
-            {% for o in outcomes %}<option value="{{ o }}" {% if o == a.outcome %}selected{% endif %}>{{ o }}</option>{% endfor %}
-          </select>
-          <button type="submit">Set outcome</button>
-        </form>
-        {% endif %}
         <form method="post" action="/actions/{{ a.id }}/delete" class="inline" onsubmit="return confirm('Delete this action?')">
           <input type="hidden" name="next" value="/jobs/{{ job.id }}?back={{ back|urlencode }}">
           <button type="submit" class="link">delete</button>

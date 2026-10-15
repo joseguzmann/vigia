@@ -80,7 +80,7 @@ form.inline { display: inline-flex; gap: 6px; align-items: center; margin-top: 4
 .summaries { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0 24px; }
 table.summary td:first-child { font-weight: 500; }
 select.outcome.positive { border-color: var(--fit); color: var(--fit); font-weight: 600; }
-select.outcome.rejected, select.outcome.ghost { color: var(--muted); }
+select.outcome.rejected, select.outcome.ghost, select.outcome.closed { color: var(--muted); }
 
 .report table { width: auto; min-width: 50%; margin-bottom: 10px; }
 .report h2 { font-size: 20px; }

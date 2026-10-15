@@ -1,17 +1,18 @@
 """Data access for the web UI.
 
-The web process reads `jobs`, `runs`, `requests` and `state`, and writes only to `actions`:
-what the person did with each job. Every write is one short statement and an immediate commit,
+The web process reads `jobs`, `runs`, `requests` and `state`, and writes to `actions` (jobs
+skipped or saved for later) and, through `vigia.applications`, to `applications`. Every write is one short statement and an immediate commit,
 so it never holds the lock the collector needs.
 
 actions
   id        INTEGER PRIMARY KEY
   job_id    INTEGER   jobs.id
   ts        TEXT      UTC ISO timestamp of the action
-  action    TEXT      "applied" | "skipped" | "saved"
-  variant   TEXT      applied: the experiment arm (A1 = AI CV, A2 = CV for the role type; or free text)
+  action    TEXT      "skipped" | "saved"  (applications have their own table now; old
+                      "applied" rows are moved there by `migrate_applied_actions`)
+  variant   TEXT      legacy: experiment arm of an old "applied" row
   reason    TEXT      skipped: years | location | stack | closed | level | other
-  outcome   TEXT      applied: none | ack | rejected | screen | technical | final | offer | ghost
+  outcome   TEXT      legacy
   note      TEXT      free text
   age_days  INTEGER   age of the posting in days when the action was taken (freshness at
                       apply time); NULL when the posting has no date
@@ -28,13 +29,11 @@ import threading
 from collections import defaultdict
 from datetime import datetime, timezone
 
+from vigia import applications as apps
 from vigia import db
 
-ACTIONS = ("applied", "skipped", "saved")
-VARIANTS = ("A1", "A2")
+ACTIONS = ("skipped", "saved")
 SKIP_REASONS = ("years", "location", "stack", "closed", "level", "other")
-OUTCOMES = ("none", "ack", "rejected", "screen", "technical", "final", "offer", "ghost")
-POSITIVE = frozenset({"screen", "technical", "final", "offer"})
 VERDICTS = ("fit", "extra", "review", "out")
 DEFAULT_VERDICTS = ("fit", "extra", "review")
 VERDICT_LABELS = {"fit": "fit", "extra": "Extra: abroad with visa/relocation",
@@ -75,6 +74,8 @@ def connect() -> sqlite3.Connection:
             c.execute("PRAGMA journal_mode=WAL")
             c.executescript(db.SCHEMA)  # idempotent; a fresh install may open the UI first
             c.executescript(SCHEMA)
+            c.executescript(apps.SCHEMA)
+            migrate_applied_actions(c)
             _ready.add(str(p))
     return c
 
@@ -100,7 +101,7 @@ def freshness_bucket(age: int | None) -> str:
     return FRESHNESS[0] if age <= 2 else FRESHNESS[1] if age <= 7 else FRESHNESS[2] if age <= 14 else FRESHNESS[3]
 
 
-def view(row, last: sqlite3.Row | None = None) -> dict:
+def view(row, last: dict | None = None) -> dict:
     flags = json.loads(row["flags"] or "{}")
     seen = json.loads(row["seen_in"] or "[]")
     age = age_days(row)
@@ -118,10 +119,14 @@ def view(row, last: sqlite3.Row | None = None) -> dict:
     }
 
 
-def latest_actions(c: sqlite3.Connection) -> dict[int, sqlite3.Row]:
+def latest_actions(c: sqlite3.Connection) -> dict[int, dict]:
+    """What was last done with each job. An application wins over a skip or a save."""
     rows = c.execute("""SELECT a.* FROM actions a
                         JOIN (SELECT job_id, MAX(id) id FROM actions GROUP BY job_id) m ON a.id = m.id""")
-    return {r["job_id"]: r for r in rows}
+    out = {r["job_id"]: dict(r) for r in rows}
+    for r in c.execute("SELECT job_id, number, status, variant FROM applications WHERE job_id IS NOT NULL"):
+        out[r["job_id"]] = {"action": "applied", "variant": f"#{r['number']} {r['status']}"}
+    return out
 
 
 def list_jobs(c: sqlite3.Connection, verdicts=DEFAULT_VERDICTS, source: str = "", category: str = "",
@@ -160,7 +165,8 @@ def get_job(c: sqlite3.Connection, job_id: int) -> dict | None:
     j = view(row)
     j["actions"] = [dict(a) for a in c.execute("SELECT * FROM actions WHERE job_id = ? ORDER BY id DESC",
                                                 (job_id,))]
-    j["last_action"] = j["actions"][0] if j["actions"] else None
+    j["applications"] = apps.for_job(job_id, c)
+    j["last_action"] = latest_actions(c).get(job_id)
     return j
 
 
@@ -177,36 +183,21 @@ def known_categories(c: sqlite3.Connection) -> list[str]:
 
 # --- actions -------------------------------------------------------------------
 
-def record_action(c: sqlite3.Connection, job_id: int, action: str, variant: str = "", reason: str = "",
-                  note: str = "", extra: bool = False) -> int:
+def record_action(c: sqlite3.Connection, job_id: int, action: str, reason: str = "", note: str = "") -> int:
     if action not in ACTIONS:
         raise ValueError(f"unknown action: {action}")
     row = c.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     if row is None:
         raise LookupError(job_id)
-    variant = variant.strip() if action == "applied" else ""
-    if action == "applied" and not variant:
-        raise ValueError("an application needs a variant")
     if action == "skipped" and reason not in SKIP_REASONS:
         raise ValueError("a skip needs a reason")
     cur = c.execute(
         """INSERT INTO actions(job_id, ts, action, variant, reason, outcome, note, age_days, extra)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (job_id, db.now(), action, variant or None, reason if action == "skipped" else None,
-         "none" if action == "applied" else None, note.strip() or None, age_days(row),
-         int(bool(extra)) if action == "applied" else 0))
+        (job_id, db.now(), action, None, reason if action == "skipped" else None,
+         None, note.strip() or None, age_days(row), 0))
     c.commit()
     return cur.lastrowid
-
-
-def set_outcome(c: sqlite3.Connection, action_id: int, outcome: str) -> None:
-    if outcome not in OUTCOMES:
-        raise ValueError(f"unknown outcome: {outcome}")
-    n = c.execute("UPDATE actions SET outcome = ? WHERE id = ? AND action = 'applied'",
-                  (outcome, action_id)).rowcount
-    c.commit()
-    if not n:
-        raise LookupError(action_id)
 
 
 def delete_action(c: sqlite3.Connection, action_id: int) -> int | None:
@@ -216,43 +207,20 @@ def delete_action(c: sqlite3.Connection, action_id: int) -> int | None:
     return row["job_id"] if row else None
 
 
-# --- experiment ----------------------------------------------------------------
+# --- applications ----------------------------------------------------------------
 
-def applications(c: sqlite3.Connection) -> list[dict]:
-    """One row per applied job (its latest application), newest first."""
-    rows = c.execute("""
-        SELECT a.id action_id, a.ts, a.variant, a.outcome, a.note, a.age_days, a.extra, j.*
-        FROM actions a
-        JOIN (SELECT job_id, MAX(id) id FROM actions WHERE action = 'applied' GROUP BY job_id) m
-          ON a.id = m.id
-        JOIN jobs j ON j.id = a.job_id
-        ORDER BY a.id DESC""").fetchall()
-    out = []
-    for r in rows:
-        flags = json.loads(r["flags"] or "{}")
-        out.append({
-            "action_id": r["action_id"], "job_id": r["id"], "ts": r["ts"], "title": r["title"],
-            "company": r["company"], "variant": r["variant"], "outcome": r["outcome"] or "none",
-            "note": r["note"], "extra": bool(r["extra"]), "age_at_apply": r["age_days"],
-            "freshness": freshness_bucket(r["age_days"]), "source": r["source"],
-            "category": flags.get("category") or "?", "level": flags.get("level") or "unstated",
-            "positive": (r["outcome"] or "none") in POSITIVE,
-        })
-    return out
-
-
-def summarize(apps: list[dict], key: str, order: tuple = ()) -> list[dict]:
-    """Applied, positive signals (screen or further) and rate per value of `key`."""
-    groups: dict[str, list[dict]] = defaultdict(list)
-    for a in apps:
-        groups[str(a[key])].append(a)
-    rank = {v: i for i, v in enumerate(order)}
-    rows = []
-    for k in sorted(groups, key=lambda k: (rank.get(k, len(rank)), k)):
-        n = len(groups[k])
-        pos = sum(a["positive"] for a in groups[k])
-        rows.append({"key": k, "applied": n, "positive": pos, "rate": pos / n if n else 0.0})
-    return rows
+def migrate_applied_actions(c: sqlite3.Connection) -> int:
+    """Move "applied" rows of the old actions table into applications (once)."""
+    old = c.execute("SELECT * FROM actions WHERE action = 'applied' ORDER BY id").fetchall()
+    for a in old:
+        if not c.execute("SELECT 1 FROM applications WHERE job_id = ?", (a["job_id"],)).fetchone():
+            if c.execute("SELECT 1 FROM jobs WHERE id = ?", (a["job_id"],)).fetchone():
+                apps.add(job_id=a["job_id"], applied_at=a["ts"][:10], origin="import",
+                         variant=a["variant"] if a["variant"] in apps.VARIANTS else None,
+                         extra=bool(a["extra"]), age_days=a["age_days"], notes=a["note"], c=c)
+        c.execute("DELETE FROM actions WHERE id = ?", (a["id"],))
+    c.commit()
+    return len(old)
 
 
 def skip_reasons(c: sqlite3.Connection) -> list[tuple[str, int]]:

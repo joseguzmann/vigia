@@ -90,6 +90,8 @@ def conn() -> sqlite3.Connection:
         _conn.execute("PRAGMA journal_mode=WAL")
         _conn.execute("PRAGMA busy_timeout=120000")
         _conn.executescript(SCHEMA)
+        from vigia import applications  # its tables live in the same file
+        _conn.executescript(applications.SCHEMA)
     return _conn
 
 
@@ -247,6 +249,10 @@ def merge_duplicates(key_for) -> int:
         c.execute("UPDATE jobs SET seen_in = ?, first_seen = MIN(first_seen, ?) WHERE id = ?",
                   (json.dumps(seen), r["first_seen"], k["id"]))
         c.execute("DELETE FROM jobs WHERE id = ?", (r["id"],))
+        # What the person did with the dropped copy now points at the kept one.
+        c.execute("UPDATE applications SET job_id = ? WHERE job_id = ?", (k["id"], r["id"]))
+        if c.execute("SELECT 1 FROM sqlite_master WHERE name = 'actions'").fetchone():
+            c.execute("UPDATE actions SET job_id = ? WHERE job_id = ?", (k["id"], r["id"]))
         merged += 1
     # Now that every key is unique, store the new keys (two passes avoid UNIQUE clashes).
     for key, r in keep.items():

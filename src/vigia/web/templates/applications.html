@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Applications · Vigía{% endblock %}
+{% block content %}
+<h1>Applications</h1>
+<form method="get" class="filters">
+  <label>Status
+    <select name="status"><option value="">any</option>
+      {% for st in statuses %}<option value="{{ st }}" {% if st == filters.status %}selected{% endif %}>{{ st }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="check"><input type="checkbox" name="open" value="1" {% if filters.open %}checked{% endif %}> still open</label>
+  <label>Search <input name="q" value="{{ filters.q }}"></label>
+  <button type="submit">Filter</button>
+</form>
+<p class="muted">{{ apps|length }} application{{ "" if apps|length == 1 else "s" }}</p>
+<table class="jobs">
+  <thead><tr><th>#</th><th>Applied</th><th>Job</th><th>Variant</th><th>Family</th><th>CV</th><th>Channel</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for a in apps %}
+    <tr>
+      <td class="num"><a href="/applications/{{ a.id }}?back={{ back|urlencode }}">{{ a.number }}</a></td>
+      <td class="nowrap small">{{ a.applied_at or "" }}</td>
+      <td class="title"><a href="/applications/{{ a.id }}?back={{ back|urlencode }}">{{ a.title }}</a> <span class="muted">— {{ a.company }}</span>
+        {% if a.extra %}<span class="badge">visa</span>{% endif %}{% if a.inbound %}<span class="badge">inbound</span>{% endif %}</td>
+      <td>{{ a.variant or "" }}</td>
+      <td>{{ a.family or "" }}</td>
+      <td class="small">{{ a.cv or "" }}</td>
+      <td class="small">{{ a.channel or "" }}</td>
+      <td>
+        <form method="post" action="/applications/{{ a.id }}/status" class="inline">
+          <input type="hidden" name="next" value="{{ back }}">
+          <select name="status" class="outcome {{ 'positive' if a.status in positive else a.status }}">
+            {% for st in statuses %}<option value="{{ st }}" {% if st == a.status %}selected{% endif %}>{{ st }}</option>{% endfor %}
+          </select>
+          <button type="submit">Save</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="muted">No applications match.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -32,13 +32,15 @@ def new_jobs(since: str | None = None, include_out: bool = False, limit: int = 6
     lines = [f"# Vigía — new since {_local(since)}", "",
              f"{len(rows)} new jobs: " + ", ".join(
                  f"{len(groups[v])} {VERDICT_TITLES[v].lower()}" for v in ("fit", "extra", "review", "out")), ""]
+    applied = {r["job_id"]: r["number"] for r in db.conn().execute(
+        "SELECT job_id, number FROM applications WHERE job_id IS NOT NULL")}
     for verdict in ("fit", "extra", "review"):
         # Freshest first: a posting applied to in its first 48 h competes with few others.
         items = sorted(groups[verdict], key=lambda r: (-_freshness_rank(r), -(r["score"] or 0)))[:limit]
         if not items:
             continue
         lines += [f"## {VERDICT_TITLES[verdict]} ({len(groups[verdict])})", ""]
-        lines += [_job_block(r) for r in items]
+        lines += [_job_block(r, applied.get(r["id"])) for r in items]
 
     out_rows = groups["out"]
     if out_rows:
@@ -58,7 +60,7 @@ def _freshness_rank(r) -> int:
     return 3 if age is not None and age <= 2 else 2 if age is not None and age <= 7 else 1 if age is None else 0
 
 
-def _job_block(r) -> str:
+def _job_block(r, applied_number: int | None = None) -> str:
     f = json.loads(r["flags"] or "{}")
     seen = json.loads(r["seen_in"] or "[]")
     meta = [r["location"] or "location n/a"]
@@ -74,7 +76,8 @@ def _job_block(r) -> str:
     badge = "🆕 " if age is not None and age <= 2 else ""
     if f.get("level") and f["level"] != "unstated":
         meta.append(f["level"])
-    block = [f"### {badge}{r['title']} — {r['company']}  `{r['score']}`",
+    done = f" ✅ applied #{applied_number}" if applied_number is not None else ""
+    block = [f"### {badge}{r['title']} — {r['company']}  `{r['score']}` · job {r['id']}{done}",
              " · ".join(m for m in meta if m)]
     if f.get("stack"):
         block.append("stack: " + ", ".join(f["stack"]))

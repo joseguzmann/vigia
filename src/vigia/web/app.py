@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
+from vigia import applications as apps
 from vigia import db, report
 from vigia.sources import REGISTRY
 from vigia.web import store
@@ -77,54 +78,74 @@ def create_app() -> FastAPI:
         if j is None:
             raise HTTPException(404, "No such job")
         return templates.TemplateResponse(request, "job.html", {
-            "page": "jobs", "job": j, "back": _back(back, "/"),
-            "variants": store.VARIANTS, "reasons": store.SKIP_REASONS, "outcomes": store.OUTCOMES})
+            "page": "jobs", "job": j, "back": _back(back, "/"), "reasons": store.SKIP_REASONS,
+            "next": apps.next_variant(c), "variants": apps.VARIANTS, "families": apps.FAMILIES,
+            "channels": apps.CHANNELS, "statuses": apps.STATUSES})
 
     @app.post("/jobs/{job_id}/actions")
-    def add_action(job_id: int, c=Depends(get_conn), action: str = Form(...), variant: str = Form(""),
-                   reason: str = Form(""), note: str = Form(""), extra: str = Form(""),
-                   back: str = Form("/")):
+    def add_action(job_id: int, c=Depends(get_conn), action: str = Form(...), reason: str = Form(""),
+                   note: str = Form(""), back: str = Form("/")):
         try:
-            store.record_action(c, job_id, action, variant, reason, note, bool(extra))
+            store.record_action(c, job_id, action, reason, note)
         except LookupError:
             raise HTTPException(404, "No such job")
         except ValueError as e:
             raise HTTPException(400, str(e))
         return RedirectResponse(f"/jobs/{job_id}?" + urlencode({"back": _back(back, "/")}), status_code=303)
 
-    @app.post("/actions/{action_id}/outcome")
-    def outcome(action_id: int, c=Depends(get_conn), outcome: str = Form(...), next: str = Form("/experiment")):
+    @app.post("/jobs/{job_id}/apply")
+    def apply(job_id: int, c=Depends(get_conn), variant: str = Form(""), family: str = Form(""),
+              channel: str = Form(""), cv: str = Form(""), material: str = Form(""), notes: str = Form(""),
+              extra: str = Form(""), status: str = Form("applied"), back: str = Form("/")):
         try:
-            store.set_outcome(c, action_id, outcome)
+            apps.add(job_id=job_id, status=status, origin="user", variant=variant or None,
+                     family=family or None, channel=channel or None, cv=cv.strip() or None,
+                     material=material.strip() or None, notes=notes.strip() or None,
+                     extra=bool(extra), c=c)
         except LookupError:
-            raise HTTPException(404, "No such application")
+            raise HTTPException(404, "No such job")
         except ValueError as e:
             raise HTTPException(400, str(e))
-        return RedirectResponse(_back(next, "/experiment"), status_code=303)
+        return RedirectResponse(f"/jobs/{job_id}?" + urlencode({"back": _back(back, "/")}), status_code=303)
 
     @app.post("/actions/{action_id}/delete")
     def delete(action_id: int, c=Depends(get_conn), next: str = Form("/")):
         job_id = store.delete_action(c, action_id)
         return RedirectResponse(_back(next, f"/jobs/{job_id}" if job_id else "/"), status_code=303)
 
+    @app.get("/applications")
+    def applications(request: Request, c=Depends(get_conn), status: str = "", open: str = "", q: str = ""):
+        status = status if status in apps.STATUSES else ""
+        rows = apps.list_apps(status=status, open_only=bool(open), q=q, c=c)
+        return templates.TemplateResponse(request, "applications.html", {
+            "page": "applications", "apps": rows, "statuses": apps.STATUSES,
+            "filters": {"status": status, "open": open, "q": q}, "positive": apps.POSITIVE,
+            "back": "/applications?" + urlencode({"status": status, "open": open, "q": q})})
+
+    @app.get("/applications/{app_id}")
+    def application(request: Request, app_id: int, c=Depends(get_conn), back: str = "/applications"):
+        try:
+            a = apps.get(app_id=app_id, c=c)
+        except LookupError:
+            raise HTTPException(404, "No such application")
+        return templates.TemplateResponse(request, "application.html", {
+            "page": "applications", "a": a, "statuses": apps.STATUSES, "back": _back(back, "/applications")})
+
+    @app.post("/applications/{app_id}/status")
+    def application_status(app_id: int, c=Depends(get_conn), status: str = Form(...), note: str = Form(""),
+                           on: str = Form(""), next: str = Form("/applications")):
+        try:
+            apps.set_status(status, app_id=app_id, note=note.strip(), origin="user", on=on or None, c=c)
+        except LookupError:
+            raise HTTPException(404, "No such application")
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return RedirectResponse(_back(next, "/applications"), status_code=303)
+
     @app.get("/experiment")
     def experiment(request: Request, c=Depends(get_conn)):
-        apps = store.applications(c)
-        for a in apps:
-            a["extra_label"] = "visa/relocation" if a["extra"] else "regular"
-        summaries = [
-            ("Variant", store.summarize([a for a in apps if not a["extra"]], "variant", store.VARIANTS)),
-            ("Visa / relocation", store.summarize(apps, "extra_label", ("regular", "visa/relocation"))),
-            ("Category", store.summarize(apps, "category", store.CATEGORY_ORDER)),
-            ("Level", store.summarize(apps, "level", store.LEVELS)),
-            ("Source", store.summarize(apps, "source")),
-            ("Freshness at apply time", store.summarize(apps, "freshness", store.FRESHNESS)),
-        ]
-        total = store.summarize(apps, "extra_label")
         return templates.TemplateResponse(request, "experiment.html", {
-            "page": "experiment", "apps": apps, "summaries": summaries, "outcomes": store.OUTCOMES,
-            "applied": len(apps), "positive": sum(a["positive"] for a in apps),
-            "skips": store.skip_reasons(c), "total": total})
+            "page": "experiment", "s": apps.stats(c), "skips": store.skip_reasons(c)})
 
     @app.get("/health")
     def health(request: Request, c=Depends(get_conn), source: str = "linkedin", hours: int = 72):

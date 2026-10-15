@@ -2,20 +2,29 @@
 {% block title %}Experiment · Vigía{% endblock %}
 {% block content %}
 <h1>Experiment</h1>
-<p class="lead">{{ applied }} applied · {{ positive }} positive signal{{ "" if positive == 1 else "s" }} (screen or further){% if applied %} · {{ (positive / applied)|pct }}{% endif %}</p>
+<p class="lead">{{ s.total.applied }} cold applications · {{ s.total.signals }} with a step with a person within {{ s.window_days }} days
+  {% if s.total.rate is not none %}· {{ s.total.rate|pct }} of the decided ones{% endif %} · {{ s.total.pending }} still inside the window</p>
+<p class="muted small">Inbound (a recruiter wrote first) and applications still being prepared are left out.
+  "Decided" means the {{ s.window_days }} days have passed, or the application was already closed.</p>
 
 <div class="summaries">
-{% for title, rows in summaries %}
   <section>
-    <h2>{{ title }}</h2>
-    {% if title == "Variant" %}<p class="muted small">Visa/relocation roles are left out of this table.</p>{% endif %}
+    <h2>Status now</h2>
+    <table class="summary"><tbody>
+      {% for r in s.status_counts %}<tr><td>{{ r.key }}</td><td class="num">{{ r.n }}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+{% for title, rows in s.groups.items() %}
+  <section>
+    <h2>{{ title|capitalize }}</h2>
     <table class="summary">
-      <thead><tr><th></th><th>Applied</th><th>Positive</th><th>Rate</th></tr></thead>
+      <thead><tr><th></th><th>Applied</th><th>Signal</th><th>Pending</th><th>Rate</th></tr></thead>
       <tbody>
       {% for r in rows %}
-        <tr><td>{{ r.key }}</td><td class="num">{{ r.applied }}</td><td class="num">{{ r.positive }}</td><td class="num">{{ r.rate|pct }}</td></tr>
+        <tr><td>{{ r.key }}</td><td class="num">{{ r.applied }}</td><td class="num">{{ r.signals }}</td>
+          <td class="num">{{ r.pending }}</td><td class="num">{{ r.rate|pct if r.rate is not none else "–" }}</td></tr>
       {% else %}
-        <tr><td colspan="4" class="muted">No applications yet.</td></tr>
+        <tr><td colspan="5" class="muted">No applications yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -30,33 +39,5 @@
   </section>
 {% endif %}
 </div>
-
-<h2>Applications</h2>
-<table class="jobs">
-  <thead><tr><th>Applied</th><th>Job</th><th>Variant</th><th>Category</th><th>Level</th><th>Source</th><th>Age then</th><th>Outcome</th></tr></thead>
-  <tbody>
-  {% for a in apps %}
-    <tr>
-      <td class="nowrap small">{{ a.ts|local }}</td>
-      <td class="title"><a href="/jobs/{{ a.job_id }}">{{ a.title }}</a> <span class="muted">— {{ a.company }}</span></td>
-      <td>{{ a.variant }}{% if a.extra %} <span class="badge">visa</span>{% endif %}</td>
-      <td>{{ a.category }}</td>
-      <td>{{ a.level }}</td>
-      <td class="small">{{ a.source }}</td>
-      <td>{{ "%sd"|format(a.age_at_apply) if a.age_at_apply is not none else "?" }}</td>
-      <td>
-        <form method="post" action="/actions/{{ a.action_id }}/outcome" class="inline">
-          <input type="hidden" name="next" value="/experiment">
-          <select name="outcome" class="outcome {{ 'positive' if a.positive else a.outcome }}">
-            {% for o in outcomes %}<option value="{{ o }}" {% if o == a.outcome %}selected{% endif %}>{{ o }}</option>{% endfor %}
-          </select>
-          <button type="submit">Save</button>
-        </form>
-      </td>
-    </tr>
-  {% else %}
-    <tr><td colspan="8" class="muted">No applications recorded yet. Record one from a job's page.</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
+<p><a href="/applications">All applications →</a></p>
 {% endblock %}

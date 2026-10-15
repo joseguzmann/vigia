@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 
+from vigia import applications as apps
 from vigia import db
 from vigia.models import Job
 from vigia.web import create_app, store
@@ -69,63 +70,66 @@ def test_detail_and_actions(client):
     other = add_job("Data Engineer", "Globex")
     r = client.get(f"/jobs/{job_id}")
     assert r.status_code == 200 and "Line one\nLine two" in r.text and "https://example.test/" in r.text
+    assert "This will be #1" in r.text
 
-    r = client.post(f"/jobs/{job_id}/actions", data={"action": "applied", "variant": "A1B2", "extra": "1"},
-                    follow_redirects=False)
+    r = client.post(f"/jobs/{job_id}/apply", data={"variant": "A1", "family": "backend", "channel": "company",
+                                                    "cv": "ai-ended", "extra": "1"}, follow_redirects=False)
     assert r.status_code == 303
     client.post(f"/jobs/{other}/actions", data={"action": "skipped", "reason": "years", "note": "asks 6"})
 
     c = store.connect()
-    rows = c.execute("SELECT * FROM actions ORDER BY id").fetchall()
-    assert [(a["job_id"], a["action"], a["variant"], a["outcome"], a["extra"]) for a in rows] == \
-        [(job_id, "applied", "A1B2", "none", 1), (other, "skipped", None, None, 0)]
-    assert rows[0]["age_days"] == 4 and rows[1]["reason"] == "years" and rows[1]["note"] == "asks 6"
+    a = apps.list_apps(c=c)[0]
+    assert (a["number"], a["job_id"], a["variant"], a["cv"], a["extra"], a["age_days"], a["status"]) == \
+        (1, job_id, "A1", "ai-ended", 1, 4, "applied")
+    skip = c.execute("SELECT * FROM actions").fetchone()
+    assert (skip["job_id"], skip["action"], skip["reason"], skip["note"]) == (other, "skipped", "years", "asks 6")
 
-    # Outcome is editable later; only valid values are accepted.
-    assert client.post(f"/actions/{rows[0]['id']}/outcome", data={"outcome": "screen"}).status_code == 200
-    assert c.execute("SELECT outcome FROM actions WHERE id = ?", (rows[0]["id"],)).fetchone()[0] == "screen"
-    assert client.post(f"/actions/{rows[0]['id']}/outcome", data={"outcome": "hired!"}).status_code == 400
+    # The job page shows the application instead of the form; status is changed from its page.
+    assert f'href="/applications/{a["id"]}"' in client.get(f"/jobs/{job_id}").text
+    assert client.post(f"/applications/{a['id']}/status", data={"status": "screen", "note": "call"}).status_code == 200
+    assert apps.get(app_id=a["id"], c=c)["status"] == "screen"
+    assert client.post(f"/applications/{a['id']}/status", data={"status": "hired!"}).status_code == 400
+    assert "screen" in client.get(f"/applications/{a['id']}").text
+    assert "Backend Engineer" in client.get("/applications?open=1").text
     # Bad input is rejected.
+    assert client.post(f"/jobs/{job_id}/apply", data={"variant": "A9"}).status_code == 400
     assert client.post(f"/jobs/{job_id}/actions", data={"action": "applied"}).status_code == 400
     assert client.post(f"/jobs/{job_id}/actions", data={"action": "skipped", "reason": "x"}).status_code == 400
     assert client.post("/jobs/999/actions", data={"action": "saved"}).status_code == 404
+    assert client.post("/jobs/999/apply", data={"variant": "A1"}).status_code == 404
 
     # "Only not acted on" hides both.
     r = client.get("/?open=1")
     assert "Backend Engineer" not in r.text and "Data Engineer" not in r.text
 
 
-def test_experiment_summary_math(client):
-    ids = [add_job(f"Engineer {i}", f"Co{i}", age=age, category=cat)
-           for i, (age, cat) in enumerate([(1, "ai"), (1, "ai"), (5, "backend"), (20, "backend"), (None, "ai")])]
-    plan = [("A1B1", "screen"), ("A1B1", "rejected"), ("A1B1", "offer"), ("A2B2", "none"), ("A2B2", "technical")]
+def test_experiment_page(client):
     c = store.connect()
-    for job_id, (variant, outcome) in zip(ids, plan):
-        aid = store.record_action(c, job_id, "applied", variant)
-        store.set_outcome(c, aid, outcome)
-
-    apps = store.applications(c)
-    by_variant = {r["key"]: r for r in store.summarize(apps, "variant", store.VARIANTS)}
-    assert (by_variant["A1B1"]["applied"], by_variant["A1B1"]["positive"]) == (3, 2)
-    assert by_variant["A1B1"]["rate"] == pytest.approx(2 / 3)
-    assert (by_variant["A2B2"]["applied"], by_variant["A2B2"]["positive"], by_variant["A2B2"]["rate"]) == (2, 1, 0.5)
-    by_cat = {r["key"]: (r["applied"], r["positive"]) for r in store.summarize(apps, "category")}
-    assert by_cat == {"ai": (3, 2), "backend": (2, 1)}
-    by_fresh = {r["key"]: (r["applied"], r["positive"]) for r in store.summarize(apps, "freshness", store.FRESHNESS)}
-    assert by_fresh == {"0-2 days": (2, 1), "3-7 days": (1, 1), "15+ days": (1, 0), "no date": (1, 1)}
-
+    today = date.today()
+    old = (today - timedelta(days=30)).isoformat()
+    a = apps.add(company="Acme", title="AI Engineer", variant="A1", family="ai", applied_at=old, c=c)
+    apps.set_status("screen", app_id=a["id"], on=(today - timedelta(days=25)).isoformat(), c=c)
+    apps.add(company="Globex", title="Backend Engineer", variant="A2", family="backend", applied_at=old, c=c)
+    apps.add(company="Initech", title="Backend Engineer", variant="A2", family="backend", c=c)
     r = client.get("/experiment")
     assert r.status_code == 200
-    assert "5 applied · 3 positive signals" in r.text and "67%" in r.text
+    assert "3 cold applications · 1 with a step with a person within 14 days" in r.text and "50%" in r.text
 
 
-def test_reapplying_counts_once(client):
-    job_id = add_job("Backend Engineer", "Acme")
-    c = store.connect()
-    store.record_action(c, job_id, "saved")
-    store.record_action(c, job_id, "applied", "A1B1")
-    store.record_action(c, job_id, "applied", "A1B1")
-    assert len(store.applications(c)) == 1
+def test_old_applied_actions_are_moved_to_applications(tmp_path):
+    job_id = add_job("Backend Engineer", "Acme", age=2)
+    c = db.conn()
+    c.execute("""CREATE TABLE IF NOT EXISTS actions (id INTEGER PRIMARY KEY, job_id INTEGER NOT NULL, ts TEXT NOT NULL,
+                 action TEXT NOT NULL, variant TEXT, reason TEXT, outcome TEXT, note TEXT, age_days INTEGER,
+                 extra INTEGER NOT NULL DEFAULT 0)""")
+    c.execute("INSERT INTO actions(job_id, ts, action, variant, outcome, age_days, extra) "
+              "VALUES (?, '2026-10-15T21:05:01+00:00', 'applied', 'A2', 'none', 10, 0)", (job_id,))
+    c.commit()
+    store._ready.clear()
+    s = store.connect()
+    a = apps.list_apps(c=s)
+    assert [(x["job_id"], x["variant"], x["applied_at"], x["age_days"]) for x in a] == [(job_id, "A2", "2026-10-15", 10)]
+    assert s.execute("SELECT COUNT(*) FROM actions WHERE action = 'applied'").fetchone()[0] == 0
 
 
 def test_health_page(client):

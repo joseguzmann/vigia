@@ -128,6 +128,40 @@ The container runs `vigia serve`: a loop that runs each enabled source when its
 | `vigia reflag` | re-judge stored jobs after changing the config |
 | `vigia sources` | list sources |
 | `vigia web [--host] [--port]` | the web UI (default `127.0.0.1:8000`) |
+| `vigia mcp` | MCP server on stdio (see below) |
+| `vigia app list [--open] [--status S]` | applications |
+| `vigia app show N` / `vigia app status N STATUS [--note] [--on DATE]` | one application / move it |
+| `vigia app next` | number and experiment variant of the next application |
+| `vigia app stats` / `vigia app export` | the experiment as JSON / every application as Markdown |
+| `vigia app import FILE.json` | bulk load from an older log |
+
+## Applications
+
+Vigía also keeps the record of the job search: every application, found by Vigía or entered by
+hand, with the CV that was sent, the experiment variant, the channel, what was written for it,
+and every status change (`preparing → applied → ack → screen → technical → final → offer`, or
+`rejected` / `ghost` / `closed`) with its date and where the news came from (email, the user, the
+assistant). That history is what measures the experiment: a success is **a step with a person
+within 14 days of applying**. Inbound contacts and applications still being prepared are kept
+but left out of the numbers. Applications younger than 14 days with no reply yet are shown as
+*pending*, not as failures.
+
+The rotation is by application number: odd numbers get variant A1, even numbers A2.
+
+## MCP server
+
+`vigia mcp` speaks the Model Context Protocol on stdin/stdout, so an assistant can read the
+radar and keep the application log without a port being opened anywhere. From another machine:
+
+```bash
+claude mcp add vigia -- ssh your-server docker exec -i vigia vigia mcp
+```
+
+Tools: `health`, `new_jobs`, `mark_reviewed`, `search_jobs`, `get_job`, `skip_job`,
+`next_application`, `record_application`, `set_application_status`, `update_application`,
+`list_applications`, `get_application`, `experiment_stats`, `export_applications_markdown`.
+Calls are run one at a time over a single connection to the same SQLite file the collector
+writes (WAL, busy timeout), and invalid values come back as errors that name the allowed ones.
 
 ## Web UI
 
@@ -135,15 +169,16 @@ The container runs `vigia serve`: a loop that runs each enabled source when its
 
 - **Jobs**: the judged jobs, freshest first (🆕 = posted in the last 2 days), filterable by
   verdict, source, category, level, age and text, or only the ones not acted on yet.
-- **Job**: every field, the full description, the flags, every board it was seen on, and a
-  form to record what you did: `applied` (with an experiment variant and a visa/relocation
-  mark), `skipped` (with a reason) or `saved`. The outcome of an application is edited later.
-- **Experiment**: applications with their outcome, and the share that reached a screen or
-  further, by variant, category, level, source and how old the posting was when you applied.
+- **Job**: every field, the full description, the flags, every board it was seen on, and
+  forms to record an application (the next number and its variant are suggested), a skip
+  (with a reason) or a save.
+- **Applications**: every application with its status, editable in place; each one has a page
+  with its details and full status history.
+- **Experiment**: cold applications and how many got a step with a person within 14 days, by
+  variant, visa flag, family, level, channel and how old the posting was when applying.
 - **Health**: `vigia health` and `vigia throttle` as HTML.
 
-The UI writes only to its own `actions` table (one row per action; the latest one is the job's
-state; `age_days` stores the posting's age at action time). It has no login: the Compose
+The UI writes to `applications` / `application_events` and to `actions` (skips and saves). It has no login: the Compose
 service publishes it on `127.0.0.1:8001` only, so reach it through an SSH tunnel:
 
 ```bash

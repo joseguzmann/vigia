@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}#{{ a.number }} {{ a.company }} · Vigía{% endblock %}
+{% block content %}
+<p><a href="{{ back }}">← back to applications</a></p>
+<h1>#{{ a.number }} · {{ a.title }}</h1>
+<p class="lead">{{ a.company }} · <span class="act applied">{{ a.status }}</span>
+  {% if a.signal_days is not none %}· a person replied after {{ a.signal_days }} day{{ "" if a.signal_days == 1 else "s" }}{% endif %}</p>
+<div class="grid">
+  <section>
+    <dl class="fields">
+      <dt>Posting</dt><dd>{% if a.url|http %}<a href="{{ a.url|http }}" target="_blank" rel="noopener noreferrer">{{ a.url }}</a>{% else %}n/a{% endif %}
+        {% if a.job_id %} · <a href="/jobs/{{ a.job_id }}">job in Vigía</a>{% endif %}</dd>
+      <dt>Applied</dt><dd>{{ a.applied_at or "not sent yet" }}</dd>
+      <dt>Channel</dt><dd>{{ a.channel or "n/a" }}{% if a.inbound %} (inbound){% endif %}</dd>
+      <dt>CV</dt><dd>{{ a.cv or "n/a" }}</dd>
+      <dt>Variant</dt><dd>{{ a.variant or "not in the experiment" }}</dd>
+      <dt>Family</dt><dd>{{ a.family or "n/a" }}</dd>
+      <dt>Level</dt><dd>{{ a.level or "n/a" }}</dd>
+      <dt>Visa / relocation</dt><dd>{{ "yes" if a.extra else "no" }}</dd>
+      <dt>Posting age</dt><dd>{{ "%s days"|format(a.age_days) if a.age_days is not none else "unknown" }}</dd>
+      <dt>Written for it</dt><dd>{{ a.material or "n/a" }}</dd>
+      <dt>Drafts</dt><dd>{{ a.docs or "n/a" }}</dd>
+    </dl>
+    <h2>Notes</h2>
+    <div class="description">{{ a.notes or "(none)" }}</div>
+  </section>
+  <aside>
+    <h2>Change status</h2>
+    <form method="post" action="/applications/{{ a.id }}/status" class="action">
+      <input type="hidden" name="next" value="/applications/{{ a.id }}?back={{ back|urlencode }}">
+      <label>Status
+        <select name="status">{% for st in statuses %}<option value="{{ st }}" {% if st == a.status %}selected{% endif %}>{{ st }}</option>{% endfor %}</select>
+      </label>
+      <label>On (if not today) <input type="date" name="on"></label>
+      <label>Note <input name="note"></label>
+      <button type="submit">Save</button>
+    </form>
+    <h2>History</h2>
+    <ul class="history">
+      {% for e in a.events|reverse %}
+      <li><span class="act applied">{{ e.status }}</span> {{ e.ts[:10] }}{% if e.origin %} · {{ e.origin }}{% endif %}
+        {% if e.note %}<div class="muted">{{ e.note }}</div>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </aside>
+</div>
+{% endblock %}
