@@ -52,17 +52,32 @@ def parse_date(value) -> datetime | None:
         return None
 
 
+LD_OPEN_RE = re.compile(r'<script[^>]*application/ld\+json[^>]*>')
+
+
+def ld_json_blocks(html_text: str):
+    """Parsed ld+json blocks of a page. Linear: an unclosed tag ends the scan instead of
+    making every later tag rescan the rest of the page (a truncated page took ~30 s)."""
+    html_text = html_text or ""
+    pos = 0
+    while m := LD_OPEN_RE.search(html_text, pos):
+        end = html_text.find("</script>", m.end())
+        if end < 0:
+            return
+        try:
+            yield json.loads(html_text[m.end():end])
+        except ValueError:
+            pass
+        pos = end
+
+
 def job_posting_ld(html_text: str) -> dict | None:
     """The schema.org JobPosting embedded in a job page, if any, with countries flattened.
 
     Many boards embed it for Google Jobs. `applicantLocationRequirements` is the
     authoritative list of countries a remote role accepts, when present.
     """
-    for m in re.finditer(r'<script[^>]*application/ld\+json[^>]*>(.*?)</script>', html_text or "", re.S):
-        try:
-            data = json.loads(m.group(1))
-        except ValueError:
-            continue
+    for data in ld_json_blocks(html_text):
         nodes = data if isinstance(data, list) else data.get("@graph", [data])
         for node in nodes:
             if isinstance(node, dict) and node.get("@type") == "JobPosting":

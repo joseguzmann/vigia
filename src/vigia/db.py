@@ -147,7 +147,7 @@ def upsert_job(job, verdict: str, score: int, flags: dict) -> bool:
     c = conn()
     ts = now()
     posted = job.posted_at.isoformat(timespec="seconds") if job.posted_at else None
-    row = c.execute("SELECT id, seen_in, description, verdict FROM jobs WHERE dedupe_key = ?",
+    row = c.execute("SELECT id, seen_in, description, verdict, url FROM jobs WHERE dedupe_key = ?",
                     (job.dedupe_key,)).fetchone()
     if row is None:
         c.execute(
@@ -181,7 +181,9 @@ def upsert_job(job, verdict: str, score: int, flags: dict) -> bool:
                   (ts, json.dumps(seen_in), job.url, job.location, _bool(job.remote),
                    job.description or row["description"], job.salary, verdict, score,
                    json.dumps(flags), row["id"]))
-    elif longer and RANK.get(verdict, 0) == RANK.get(row["verdict"], 0):
+    elif longer and row["url"] == job.url:
+        # The same posting came back with its full text (e.g. a LinkedIn card that now has
+        # a description): judge it again, even if the new verdict is worse.
         c.execute("""UPDATE jobs SET last_seen = ?, seen_in = ?, description = ?, verdict = ?,
                          score = ?, flags = ? WHERE id = ?""",
                   (ts, json.dumps(seen_in), job.description, verdict, score,

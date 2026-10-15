@@ -99,3 +99,15 @@ def test_post_noise_filters():
                  "LATAM / EU Open to Remote Full Stack roles. Let's build something great"):
         assert NOT_HIRING_RE.search(text), text
     assert not NOT_HIRING_RE.search("We're Hiring: Full Stack Developer – Remote (LATAM Only) $6,000–$7,000 USD/month")
+
+
+def test_ld_json_parsers_stay_fast_on_unclosed_scripts():
+    # A truncated page with many unclosed ld+json tags made the regex rescan the rest of
+    # the page from every tag: ~30 s for this input. A run must never hang on one page.
+    import time
+    from vigia.sources.base import job_posting_ld
+    from vigia.sources.linkedin_posts import parse_post
+    html = '<script type="application/ld+json">x' * 20_000
+    t = time.monotonic()
+    assert job_posting_ld(html) is None and parse_post(html) is None
+    assert time.monotonic() - t < 1

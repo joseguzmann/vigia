@@ -83,3 +83,13 @@ def test_linkedin_cooldown_is_shared_and_blocks_requests(monkeypatch):
     with pytest.raises(Blocked):           # a different source, same cooldown
         Guest("linkedin_posts").get("post", "https://y")
     assert calls == []                      # nothing was sent during the cooldown
+
+
+def test_full_description_can_make_the_verdict_worse():
+    from vigia.models import Job
+    card = Job(source="linkedin", source_id="1", title="Senior Full Stack Developer", company="FullStack",
+               url="https://li/1", location="Ecuador")
+    db.upsert_job(card, "fit", 7, {"reasons": []})
+    card.description = "5+ years of professional Software Development experience."
+    db.upsert_job(card, "out", 2, {"reasons": ["asks 5+ years"]})
+    assert db.all_jobs()[0]["verdict"] == "out"

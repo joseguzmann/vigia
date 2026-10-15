@@ -18,7 +18,6 @@ Ideas and measurements from moeezahmadkhan/linkedin-scraper (MIT): Google's inde
 
 from __future__ import annotations
 
-import json
 import os
 import re
 from datetime import datetime, timedelta, timezone
@@ -26,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 from vigia import db, http, vocab
 from vigia.linkedin_guest import Blocked, Guest
 from vigia.models import Job
-from vigia.sources.base import Source, parse_date
+from vigia.sources.base import Source, ld_json_blocks, parse_date
 
 SERPER = "https://google.serper.dev/search"
 ACTIVITY_RE = re.compile(r"activity[-:](\d{17,20})")
@@ -55,11 +54,7 @@ def activity_date(url: str) -> datetime | None:
 
 
 def parse_post(html_text: str) -> dict | None:
-    for m in re.finditer(r'<script[^>]*application/ld\+json[^>]*>(.*?)</script>', html_text or "", re.S):
-        try:
-            data = json.loads(m.group(1))
-        except ValueError:
-            continue
+    for data in ld_json_blocks(html_text):
         for node in (data if isinstance(data, list) else data.get("@graph", [data])):
             if isinstance(node, dict) and node.get("@type") in ("SocialMediaPosting", "DiscussionForumPosting"):
                 author = node.get("author") or {}
