@@ -239,3 +239,7 @@ def test_title_level():
     assert title_level("Desarrollador Python Semi Senior") == "mid"
     assert title_level("Staff Software Engineer, Backend") == "principal"
     assert title_level("AI Engineer") == "unstated"
+
+
+def test_years_after_a_heading_ending_in_for():
+    assert years_required("What We're Looking For \n\n 5+ years of professional Software Development experience.") == 5

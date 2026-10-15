@@ -83,7 +83,8 @@ def years_required(text: str) -> int | None:
     """The main years-of-experience requirement, or None if the posting does not say."""
     found = []
     for m in YEARS_RE.finditer(text or ""):
-        if YEARS_NOISE_RE.search(text[max(0, m.start() - 25):m.start()]):
+        before = text[max(0, m.start() - 25):m.start()].rsplit("\n", 1)[-1]  # same line only:
+        if YEARS_NOISE_RE.search(before):   # "Looking For\n 5+ years" is a requirement
             continue
         after = text[m.end():m.end() + 60].lower()
         if not re.search(r"experien|of |in |building|develop|work|professional|hands|de |con ", after):
