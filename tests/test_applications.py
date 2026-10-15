@@ -90,6 +90,8 @@ def test_stats_window_pending_and_exclusions():
     apps.add(company="D", title="t", variant="A2", family="backend", applied_at=old, extra=True)
     apps.add(company="E", title="t", inbound=True, applied_at=old)                           # left out
     apps.add(company="F", title="t", status="preparing")                                    # left out
+    dropped = apps.add(company="G", title="t", status="preparing")
+    apps.set_status("closed", app_id=dropped["id"])                                          # never sent
     s = apps.stats()
     assert s["total"] == {"applied": 4, "signals": 1, "pending": 1, "rate": pytest.approx(1 / 3)}
     variant = {r["key"]: (r["applied"], r["signals"], r["pending"]) for r in s["groups"]["variant (visa roles left out)"]}

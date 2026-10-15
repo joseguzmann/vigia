@@ -344,7 +344,10 @@ def stats(c: sqlite3.Connection | None = None) -> dict:
     """
     c = _c(c)
     today = date.today()
-    apps = [a for a in list_apps(c=c) if not a["inbound"] and a["status"] != "preparing"]
+    # Sent = some event past preparing; one dropped while preparing ("closed") never went out.
+    sent = {r[0] for r in c.execute(
+        "SELECT DISTINCT application_id FROM application_events WHERE status NOT IN ('preparing', 'closed')")}
+    apps = [a for a in list_apps(c=c) if not a["inbound"] and a["id"] in sent]
 
     def row(group: list[dict]) -> dict:
         ok = [a for a in group if a["signal_days"] is not None and a["signal_days"] <= SIGNAL_WINDOW_DAYS]
