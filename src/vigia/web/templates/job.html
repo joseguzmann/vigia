@@ -47,7 +47,7 @@
       <input type="hidden" name="back" value="{{ back }}">
       <h3>Applied</h3>
       <label>Variant
-        <input name="variant" list="variants" required placeholder="A1B1">
+        <input name="variant" list="variants" required placeholder="A1 or A2">
         <datalist id="variants">{% for v in variants %}<option value="{{ v }}">{% endfor %}</datalist>
       </label>
       <label class="check"><input type="checkbox" name="extra" value="1" {% if job.verdict == "extra" %}checked{% endif %}> visa / relocation role</label>

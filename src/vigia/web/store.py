@@ -9,7 +9,7 @@ actions
   job_id    INTEGER   jobs.id
   ts        TEXT      UTC ISO timestamp of the action
   action    TEXT      "applied" | "skipped" | "saved"
-  variant   TEXT      applied: the experiment arm (A1B1, A1B2, A2B1, A2B2 or free text)
+  variant   TEXT      applied: the experiment arm (A1 = AI CV, A2 = CV for the role type; or free text)
   reason    TEXT      skipped: years | location | stack | closed | level | other
   outcome   TEXT      applied: none | ack | rejected | screen | technical | final | offer | ghost
   note      TEXT      free text
@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from vigia import db
 
 ACTIONS = ("applied", "skipped", "saved")
-VARIANTS = ("A1B1", "A1B2", "A2B1", "A2B2")
+VARIANTS = ("A1", "A2")
 SKIP_REASONS = ("years", "location", "stack", "closed", "level", "other")
 OUTCOMES = ("none", "ack", "rejected", "screen", "technical", "final", "offer", "ghost")
 POSITIVE = frozenset({"screen", "technical", "final", "offer"})
