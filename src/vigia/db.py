@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS state (
 """
 
 _conn: sqlite3.Connection | None = None
-RANK = {"out": 0, "review": 1, "fit": 2}
+RANK = {"out": 0, "extra": 1, "review": 1, "fit": 2}
 
 
 def now() -> str:

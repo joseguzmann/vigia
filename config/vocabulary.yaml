@@ -38,6 +38,18 @@ families:
     es: [desarrollador full stack, ingeniero full stack, programador full stack]
     pt: [desenvolvedor full stack, engenheiro full stack]
 
+  frontend:
+    en: [frontend, front end, frontend engineer, frontend developer, react developer, react engineer,
+         next js developer, nextjs developer, angular developer, vue developer, javascript developer,
+         typescript developer, ui engineer, web developer]
+    es: [desarrollador frontend, ingeniero frontend, programador frontend, desarrollador react,
+         desarrollador angular, desarrollador web]
+    pt: [desenvolvedor frontend, engenheiro frontend, desenvolvedor react, desenvolvedor web]
+  mobile:
+    en: [react native, mobile engineer react native, react native developer, react native engineer, expo]
+    es: [desarrollador react native, desarrollador movil react native]
+    pt: [desenvolvedor react native]
+
 # Phrases sent to search engines. Kept short and in the way recruiters write titles.
 search:
   ai: [AI Engineer, LLM Engineer, Agentic AI Engineer, Applied AI Engineer,
@@ -46,3 +58,5 @@ search:
   backend: [Python Backend Engineer, Backend Engineer, Django Developer, FastAPI Developer,
             Desarrollador Backend Python, Software Engineer Python]
   fullstack: [Full Stack Engineer AI, Full Stack Developer Python]
+  frontend: [React Developer, Frontend Engineer React, Next.js Developer]
+  mobile: [React Native Developer]

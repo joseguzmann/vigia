@@ -32,6 +32,14 @@ YEARS_RE = re.compile(
 # Company-history phrases that are not requirements: "for over 25 years", "founded 15 years ago".
 YEARS_NOISE_RE = re.compile(r"(over|for|since|founded|history|ago|in business|leading the way)\s*$", re.I)
 
+# Roles abroad that bring the candidate there: these become "extra" instead of "out".
+VISA_RE = re.compile(
+    r"visa sponsorship|sponsor(?:ship)? (?:is )?(?:available|provided|offered)|we (?:can |will )?sponsor|"
+    r"relocation (?:support|assistance|package|bonus)|relocate to|relocation (?:is )?(?:available|provided|offered)|"
+    r"open to relocat|willing to relocate|patrocinio de visa|reubicaci[oó]n", re.I)
+NO_VISA_RE = re.compile(r"(?:not|unable to|cannot|can't|don't|do not|will not|won't) (?:provide |offer )?(?:visa )?sponsor|"
+                        r"no (?:visa )?sponsorship|sponsorship is not|without (?:the need for )?sponsorship", re.I)
+
 RESTRICTION_RE = re.compile(
     r"(?:must|required\s+to|need\s+to|needs\s+to|have\s+to)\s+(?:be\s+)?"
     r"(?:located|based|resid\w*|liv\w*)\s+in"
@@ -263,6 +271,13 @@ def evaluate(job: Job, profile: dict) -> tuple[str, int, dict]:
         if max_age is not None and age_days > max_age:
             verdict = "out"
             reasons.append(f"stale: posted {age_days} days ago")
+
+    # A role tied to another country that sponsors a visa or relocates is a valid "extra":
+    # the candidate would move. Everything else about it must still fit.
+    only_region = reg == "restricted" and all(r.startswith("restricted") for r in reasons)
+    if only_region and VISA_RE.search(text) and not NO_VISA_RE.search(text):
+        verdict = "extra"
+        reasons.append("abroad with visa/relocation")
 
     if not job.description and verdict == "fit":
         verdict = "review"

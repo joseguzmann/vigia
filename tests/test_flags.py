@@ -243,3 +243,17 @@ def test_title_level():
 
 def test_years_after_a_heading_ending_in_for():
     assert years_required("What We're Looking For \n\n 5+ years of professional Software Development experience.") == 5
+
+
+def test_frontend_and_mobile_titles_in_scope(profile):
+    from vigia.flags import title_in_scope
+    profile = {**profile, "role_families": ["ai", "backend", "fullstack", "frontend", "mobile"]}
+    for t in ("Senior React Developer", "Frontend Engineer (Next.js)", "React Native Developer"):
+        assert title_in_scope(t, profile)[0], t
+
+
+def test_abroad_with_visa_is_extra(profile):
+    j = job(location="Berlin, Germany", description="Python backend role. We offer visa sponsorship and relocation support.")
+    assert evaluate(j, profile)[0] == "extra"
+    j.description = "Python backend role in Berlin. We do not provide visa sponsorship."
+    assert evaluate(j, profile)[0] == "out"

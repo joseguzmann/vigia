@@ -4,7 +4,7 @@
 
 profile:
   # Role families from config/vocabulary.yaml (synonyms in EN/ES/PT, normalized matching).
-  role_families: [ai, backend, fullstack]
+  role_families: [ai, backend, fullstack, frontend, mobile]
   # Extra title terms on top of the families, if any.
   title_include: []
   # Titles that are never what we want, even if they match above.
@@ -18,8 +18,10 @@ profile:
     - designer
     - support agent
     - customer support
-    - ios
-    - android
+    - ios engineer
+    - android engineer
+    - swift
+    - kotlin developer
     - ".net"
     - php
     - product manager
@@ -132,7 +134,7 @@ sources:
     queries_per_run: 6
     posted_within_days: 21
     freshness: qdr:m
-    families: [ai, backend, fullstack]
+    families: [ai, backend, fullstack, frontend, mobile]
     # Measured 2026-10-14: a bare "remote" returns US/India posts; naming LATAM (or writing
     # in Spanish) is what surfaces roles open to the region.
     templates:

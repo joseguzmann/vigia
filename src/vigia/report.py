@@ -9,7 +9,8 @@ from datetime import datetime, timedelta, timezone
 from vigia import config, db
 from vigia.sources import REGISTRY
 
-VERDICT_TITLES = {"fit": "Worth applying", "review": "Worth a look", "out": "Filtered out"}
+VERDICT_TITLES = {"fit": "Worth applying", "extra": "Extra: abroad with visa/relocation",
+                  "review": "Worth a look", "out": "Filtered out"}
 
 
 def last_review() -> str:
@@ -30,8 +31,8 @@ def new_jobs(since: str | None = None, include_out: bool = False, limit: int = 6
 
     lines = [f"# Vigía — new since {_local(since)}", "",
              f"{len(rows)} new jobs: " + ", ".join(
-                 f"{len(groups[v])} {VERDICT_TITLES[v].lower()}" for v in ("fit", "review", "out")), ""]
-    for verdict in ("fit", "review"):
+                 f"{len(groups[v])} {VERDICT_TITLES[v].lower()}" for v in ("fit", "extra", "review", "out")), ""]
+    for verdict in ("fit", "extra", "review"):
         # Freshest first: a posting applied to in its first 48 h competes with few others.
         items = sorted(groups[verdict], key=lambda r: (-_freshness_rank(r), -(r["score"] or 0)))[:limit]
         if not items:
