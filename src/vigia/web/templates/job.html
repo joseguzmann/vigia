@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }} · Vigía{% endblock %}
+{% block content %}
+<p><a href="{{ back }}">← back to jobs</a></p>
+<h1>{% if job.fresh %}<span class="badge new">🆕</span> {% endif %}{{ job.title }}</h1>
+<p class="lead">{{ job.company }} · <span class="verdict {{ job.verdict }}">{{ verdict_label(job.verdict) }}</span> · score {{ job.score }}</p>
+
+<div class="grid">
+  <section>
+    <dl class="fields">
+      <dt>Location</dt><dd>{{ job.location or "n/a" }}{% if job.remote is not none %} ({{ "remote" if job.remote else "not remote" }}){% endif %}</dd>
+      <dt>Salary</dt><dd>{{ job.salary or "n/a" }}</dd>
+      <dt>Years asked</dt><dd>{{ job.years if job.years is not none else "not stated" }}</dd>
+      <dt>Level</dt><dd>{{ job.level or "unstated" }}</dd>
+      <dt>Category</dt><dd>{{ job.category or "n/a" }}</dd>
+      <dt>Region</dt><dd>{{ job.flags.region or "n/a" }}{% if job.flags.region_evidence %} <span class="muted">({{ job.flags.region_evidence }})</span>{% endif %}</dd>
+      <dt>Age</dt><dd>{{ "%s days"|format(job.age) if job.age is not none else "no date" }}</dd>
+      <dt>Posted</dt><dd>{{ job.posted_at|local or "n/a" }}</dd>
+      <dt>First seen</dt><dd>{{ job.first_seen|local }}</dd>
+      <dt>Last seen</dt><dd>{{ job.last_seen|local }}</dd>
+      <dt>Stack</dt><dd>{{ job.stack|join(", ") or "n/a" }}</dd>
+      <dt>Reasons</dt><dd>{{ job.reasons|join("; ") or "none" }}</dd>
+      {% if job.tags %}<dt>Tags</dt><dd>{{ job.tags|join(", ") }}</dd>{% endif %}
+      <dt>Seen in</dt>
+      <dd>
+        <ul class="plain">
+        {% for s in job.seen_in %}
+          <li>{{ s.source }}: {% if s.url|http %}<a href="{{ s.url|http }}" target="_blank" rel="noopener noreferrer">{{ s.url }}</a>{% else %}{{ s.url }}{% endif %}</li>
+        {% endfor %}
+        </ul>
+      </dd>
+    </dl>
+
+    <h2>Description</h2>
+    <div class="description">{{ job.description or "(no description)" }}</div>
+
+    <details>
+      <summary>Flags</summary>
+      <pre>{{ job.flags|pretty }}</pre>
+    </details>
+  </section>
+
+  <aside>
+    <h2>Act</h2>
+    <form method="post" action="/jobs/{{ job.id }}/actions" class="action">
+      <input type="hidden" name="action" value="applied">
+      <input type="hidden" name="back" value="{{ back }}">
+      <h3>Applied</h3>
+      <label>Variant
+        <input name="variant" list="variants" required placeholder="A1B1">
+        <datalist id="variants">{% for v in variants %}<option value="{{ v }}">{% endfor %}</datalist>
+      </label>
+      <label class="check"><input type="checkbox" name="extra" value="1" {% if job.verdict == "extra" %}checked{% endif %}> visa / relocation role</label>
+      <label>Note <input name="note"></label>
+      <button type="submit">Record application</button>
+    </form>
+
+    <form method="post" action="/jobs/{{ job.id }}/actions" class="action">
+      <input type="hidden" name="action" value="skipped">
+      <input type="hidden" name="back" value="{{ back }}">
+      <h3>Skipped</h3>
+      <label>Reason
+        <select name="reason" required>
+          {% for r in reasons %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Note <input name="note"></label>
+      <button type="submit">Record skip</button>
+    </form>
+
+    <form method="post" action="/jobs/{{ job.id }}/actions" class="action">
+      <input type="hidden" name="action" value="saved">
+      <input type="hidden" name="back" value="{{ back }}">
+      <h3>Saved</h3>
+      <label>Note <input name="note"></label>
+      <button type="submit">Save for later</button>
+    </form>
+
+    <h2>History</h2>
+    {% if job.actions %}
+    <ul class="history">
+      {% for a in job.actions %}
+      <li>
+        <span class="act {{ a.action }}">{{ a.action }}</span>
+        {{ a.ts|local }}
+        {% if a.variant %}· {{ a.variant }}{% endif %}
+        {% if a.extra %}· visa/relocation{% endif %}
+        {% if a.reason %}· {{ a.reason }}{% endif %}
+        {% if a.age_days is not none %}· {{ a.age_days }}d old{% endif %}
+        {% if a.note %}<div class="muted">{{ a.note }}</div>{% endif %}
+        {% if a.action == "applied" %}
+        <form method="post" action="/actions/{{ a.id }}/outcome" class="inline">
+          <input type="hidden" name="next" value="/jobs/{{ job.id }}?back={{ back|urlencode }}">
+          <select name="outcome">
+            {% for o in outcomes %}<option value="{{ o }}" {% if o == a.outcome %}selected{% endif %}>{{ o }}</option>{% endfor %}
+          </select>
+          <button type="submit">Set outcome</button>
+        </form>
+        {% endif %}
+        <form method="post" action="/actions/{{ a.id }}/delete" class="inline" onsubmit="return confirm('Delete this action?')">
+          <input type="hidden" name="next" value="/jobs/{{ job.id }}?back={{ back|urlencode }}">
+          <button type="submit" class="link">delete</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Nothing recorded yet.</p>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

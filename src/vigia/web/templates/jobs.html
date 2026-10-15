@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Jobs · Vigía{% endblock %}
+{% block content %}
+<form class="filters" method="get" action="/">
+  <input type="hidden" name="f" value="1">
+  <fieldset>
+    <legend>Verdict</legend>
+    {% for v in verdicts %}
+    <label><input type="checkbox" name="verdict" value="{{ v }}" {% if v in filters.verdict %}checked{% endif %}> {{ verdict_labels[v] }}</label>
+    {% endfor %}
+  </fieldset>
+  <label>Source
+    <select name="source">
+      <option value="">any</option>
+      {% for s in sources %}<option value="{{ s }}" {% if s == filters.source %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Category
+    <select name="category">
+      <option value="">any</option>
+      {% for s in categories %}<option value="{{ s }}" {% if s == filters.category %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Level
+    <select name="level">
+      <option value="">any</option>
+      {% for s in levels %}<option value="{{ s }}" {% if s == filters.level %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Max age (days)
+    <input type="number" name="max_age" min="0" value="{{ filters.max_age }}" class="narrow">
+  </label>
+  <label>Search
+    <input type="search" name="q" value="{{ filters.q }}" placeholder="title or company">
+  </label>
+  <label class="check"><input type="checkbox" name="open" value="1" {% if filters.open %}checked{% endif %}> only not acted on</label>
+  <button type="submit">Filter</button>
+  <a href="/" class="reset">reset</a>
+</form>
+
+<p class="muted">{{ total }} job{{ "" if total == 1 else "s" }}{% if total > jobs|length %}, showing the first {{ jobs|length }}{% endif %}.</p>
+
+<table class="jobs">
+  <thead>
+    <tr>
+      <th>Age</th><th>Title</th><th>Company</th><th>Location</th><th>Salary</th>
+      <th>Yrs</th><th>Level</th><th>Score</th><th>Sources</th><th>Verdict</th><th>Done</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for j in jobs %}
+    <tr class="v-{{ j.verdict }}">
+      <td class="nowrap">{% if j.fresh %}<span class="badge new">🆕 {{ j.age }}d</span>{% elif j.age is not none %}{{ j.age }}d{% else %}<span class="muted">?</span>{% endif %}</td>
+      <td class="title">
+        <a href="/jobs/{{ j.id }}?back={{ back|urlencode }}">{{ j.title }}</a>
+        {% if j.reasons %}<div class="reasons">{{ j.reasons|join("; ") }}</div>{% endif %}
+      </td>
+      <td>{{ j.company }}</td>
+      <td class="small">{{ j.location or "" }}</td>
+      <td class="small">{{ j.salary or "" }}</td>
+      <td>{{ j.years if j.years is not none else "" }}</td>
+      <td class="small">{{ j.level if j.level and j.level != "unstated" else "" }}</td>
+      <td class="num">{{ j.score }}</td>
+      <td class="small">{{ j.sources|join(", ") }}</td>
+      <td><span class="verdict {{ j.verdict }}" title="{{ verdict_label(j.verdict) }}">{{ verdict_label(j.verdict) }}</span></td>
+      <td class="small">{% if j.last_action %}<span class="act {{ j.last_action.action }}">{{ j.last_action.action }}{% if j.last_action.variant %} {{ j.last_action.variant }}{% endif %}</span>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="11" class="muted">No jobs match these filters.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Health · Vigía{% endblock %}
+{% block content %}
+<section class="report">{{ health }}</section>
+
+<form method="get" action="/health" class="filters">
+  <label>Throttling for
+    <select name="source">
+      {% for s in sources %}<option value="{{ s }}" {% if s == source %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Hours <input type="number" name="hours" min="1" max="720" value="{{ hours }}" class="narrow"></label>
+  <button type="submit">Show</button>
+</form>
+<section class="report">{{ throttle }}</section>
+{% endblock %}

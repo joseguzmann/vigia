@@ -127,6 +127,28 @@ The container runs `vigia serve`: a loop that runs each enabled source when its
 | `vigia throttle [SOURCE]` | requests per hour and rate-limit episodes |
 | `vigia reflag` | re-judge stored jobs after changing the config |
 | `vigia sources` | list sources |
+| `vigia web [--host] [--port]` | the web UI (default `127.0.0.1:8000`) |
+
+## Web UI
+
+`vigia web` serves a small private UI over the same database:
+
+- **Jobs**: the judged jobs, freshest first (🆕 = posted in the last 2 days), filterable by
+  verdict, source, category, level, age and text, or only the ones not acted on yet.
+- **Job**: every field, the full description, the flags, every board it was seen on, and a
+  form to record what you did: `applied` (with an experiment variant and a visa/relocation
+  mark), `skipped` (with a reason) or `saved`. The outcome of an application is edited later.
+- **Experiment**: applications with their outcome, and the share that reached a screen or
+  further, by variant, category, level, source and how old the posting was when you applied.
+- **Health**: `vigia health` and `vigia throttle` as HTML.
+
+The UI writes only to its own `actions` table (one row per action; the latest one is the job's
+state; `age_days` stores the posting's age at action time). It has no login: the Compose
+service publishes it on `127.0.0.1:8001` only, so reach it through an SSH tunnel:
+
+```bash
+ssh -N -L 8001:127.0.0.1:8001 your-server   # then open http://localhost:8001
+```
 
 ## Roadmap
 

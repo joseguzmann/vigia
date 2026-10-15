@@ -7,6 +7,7 @@
   vigia throttle [SOURCE]     requests per hour and 429 episodes (default: linkedin)
   vigia reflag                re-judge all stored jobs with the current config
   vigia sources               list available sources and whether they are enabled
+  vigia web [--host] [--port] the private web UI (jobs, actions, experiment, health)
 """
 
 from __future__ import annotations
@@ -44,6 +45,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("reflag", help="re-judge stored jobs with the current config")
     sub.add_parser("sources", help="list sources")
 
+    w = sub.add_parser("web", help="serve the web UI")
+    w.add_argument("--host", default="127.0.0.1")
+    w.add_argument("--port", type=int, default=8000)
+
     a = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -69,6 +74,11 @@ def main(argv: list[str] | None = None) -> int:
         print(report.throttling(a.source, a.hours))
     elif a.cmd == "reflag":
         print(pipeline.reflag())
+    elif a.cmd == "web":
+        import uvicorn
+
+        from vigia.web import create_app
+        uvicorn.run(create_app(), host=a.host, port=a.port, proxy_headers=False)
     elif a.cmd == "sources":
         for n in REGISTRY:
             print(f"{n:16} {'enabled' if config.source(n).get('enabled') else 'disabled'}")
