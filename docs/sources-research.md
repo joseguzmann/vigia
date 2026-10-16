@@ -100,3 +100,13 @@ Limited"), now dropped.
 **First run:** 172 postings, 6 passed (on-site or hybrid in Quito, or remote). Most of the rest are
 IT support, infrastructure or analyst roles (title out of scope), or on-site in Guayaquil, Loja, etc.
 On-site/hybrid now passes only in `profile.home_cities` (with none set, in `home_country`).
+
+## Indeed — 2026-10-16
+
+No public API; the mobile app's GraphQL endpoint (`apis.indeed.com/graphql`, public app key and
+headers, `indeed-co: EC`) returns up to 100 postings per search with their full text, as JobSpy
+does. Ecuador: 141 postings for 13 searches over 30 days — the local market (Sofka, EPAM, Devsu,
+Chevyplan, KATU…) plus worldwide-remote roles listed in Ecuador (Tether, My VA Support). Colombia,
+Mexico and Argentina with the remote filter return mostly on-site roles, so they are left out.
+Indeed marks the work mode only when the employer sets it; without it the text decides, and a
+local posting that says nothing is on-site. Live test before deploying: 12 passed.

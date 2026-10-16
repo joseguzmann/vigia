@@ -203,3 +203,26 @@ def test_ecuador_regions(profile):
     assert at("Quito, Pichincha, Ecuador · hybrid") == "ok"
     assert at("Guayaquil, Guayas, Ecuador (Remote)") == "ok"
     assert at("Guayaquil, Guayas, Ecuador · presencial") == "restricted"
+
+
+def test_indeed_work_mode_from_attributes_or_text(monkeypatch):
+    from vigia.sources import indeed
+    def job(key, title, city, attrs=(), desc=""):
+        return {"job": {"key": key, "title": title, "dateOnIndeed": 1792000000000, "employer": {"name": "Acme"},
+                        "description": {"html": f"<p>{desc}</p>"}, "location": {"countryCode": "EC", "city": city},
+                        "attributes": [{"key": a} for a in attrs]}}
+    data = {"data": {"jobSearch": {"results": [
+        job("a", "Desarrollador Full Stack", "Guayaquil"),                                  # nothing said: on-site
+        job("b", "Python Developer", "Quito", attrs=[indeed.REMOTE]),                       # Indeed says remote
+        job("c", "Junior Developer (Remote- LATAM ONLY)", "Desde casa"),                    # remote in title / city
+        job("d", "Frontend Developer", "Quito", desc="Modalidad híbrida, 3 días en oficina"),
+    ]}}}
+    seen = []
+    monkeypatch.setattr(http, "post_json", lambda s, k, url, payload, headers=None: seen.append(headers["indeed-co"]) or data)
+    jobs = {j.source_id: j for j in indeed.Indeed({"countries": [{"code": "EC", "queries": ["python"]}]}).fetch()}
+    assert seen == ["EC"]
+    assert jobs["a"].location == "Guayaquil, Ecuador · presencial"
+    assert (jobs["b"].location, jobs["b"].remote) == ("Quito, Ecuador (Remote)", True)
+    assert jobs["c"].location == "Ecuador (Remote)"
+    assert jobs["d"].location == "Quito, Ecuador · hybrid"
+    assert jobs["a"].url == "https://ec.indeed.com/viewjob?jk=a" and jobs["a"].posted_at.year == 2026

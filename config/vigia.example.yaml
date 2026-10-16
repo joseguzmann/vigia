@@ -99,6 +99,16 @@ sources:
     enabled: true
     every_minutes: 240
     pubdate: 30
+  indeed:
+    # Through the mobile app's GraphQL API (as JobSpy does). One request per search.
+    enabled: true
+    every_minutes: 240
+    days: 30
+    countries:
+      - code: EC
+        queries: [desarrollador, programador, python, software engineer, ingeniero de software,
+                  full stack, backend, frontend, react, inteligencia artificial, AI engineer,
+                  LLM, remote developer]
   # Company boards: companies that hire remotely in LATAM, plus remote-first AI companies.
   greenhouse:
     enabled: true
