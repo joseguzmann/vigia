@@ -90,6 +90,14 @@ sources:
     enabled: true
     every_minutes: 180
     queries: [llm, ai engineer, langchain, agentes, python, backend, django]
+  torre:
+    # From the public sitemaps (robots.txt disallows /api/). Countries come from each posting.
+    enabled: true
+    every_minutes: 360
+    days: 30
+    sitemaps_en: 3
+    sitemaps_es: 1
+    max_posts: 60
   # Ecuador's local market. On-site/hybrid only pass in profile.home_cities.
   multitrabajos:
     enabled: true

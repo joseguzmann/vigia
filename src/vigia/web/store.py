@@ -237,6 +237,7 @@ SOURCE_INFO = {
     "multitrabajos": ("Multitrabajos", "Ecuador's main job board (Bumeran network), whole IT area", "web app API"),
     "computrabajo": ("Computrabajo Ecuador", "local job board, searched by role", "HTML + JSON-LD"),
     "indeed": ("Indeed", "searches per country (Ecuador), through the mobile app's API", "GraphQL"),
+    "torre": ("Torre", "LATAM-focused; postings from its public sitemaps, with the countries each accepts", "sitemap + JSON-LD"),
     "greenhouse": ("Greenhouse", "company job boards on this applicant-tracking system", "public API"),
     "ashby": ("Ashby", "company job boards on this applicant-tracking system", "public API"),
     "lever": ("Lever", "company job boards on this applicant-tracking system", "public API"),

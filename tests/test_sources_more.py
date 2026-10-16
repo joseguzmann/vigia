@@ -226,3 +226,24 @@ def test_indeed_work_mode_from_attributes_or_text(monkeypatch):
     assert jobs["c"].location == "Ecuador (Remote)"
     assert jobs["d"].location == "Quito, Ecuador · hybrid"
     assert jobs["a"].url == "https://ec.indeed.com/viewjob?jk=a" and jobs["a"].posted_at.year == 2026
+
+
+def test_torre_from_sitemaps_skips_out_of_scope_slugs(monkeypatch):
+    from datetime import datetime, timezone
+    from vigia.sources import torre
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    index = b"<sitemapindex><sitemap><loc>https://torre.ai/sitemap-en-1655.xml</loc></sitemap>" \
+            b"<sitemap><loc>https://torre.ai/sitemap-en-1656.xml</loc></sitemap></sitemapindex>"
+    smap = (f"<urlset><url><loc>https://torre.ai/post/AbC123-niuro-senior-ai-engineer-fintech</loc><lastmod>{today}</lastmod></url>"
+            f"<url><loc>https://torre.ai/post/ZzZ999-acme-sales-manager</loc><lastmod>{today}</lastmod></url>"
+            f"<url><loc>https://torre.ai/post/Old111-acme-python-developer</loc><lastmod>2020-01-01T00:00:00Z</lastmod></url></urlset>").encode()
+    page = ('<script type="application/ld+json">{"@type": "JobPosting", "title": "Senior AI Engineer, Fintech",'
+            '"description": "<p>LLM agents</p>", "datePosted": "2026-10-08T10:00:00Z", "jobLocationType": "TELECOMMUTE",'
+            '"hiringOrganization": {"name": "Niuro"}, "applicantLocationRequirements": ['
+            '{"@type": "Country", "name": "Argentina"}, {"@type": "Country", "name": "Ecuador"}]}</script>').encode()
+    asked = serve(monkeypatch, {"sitemap-index.xml": index, "sitemap-en-1656.xml": smap, "sitemap-en-1655.xml": b"<urlset/>",
+                                "post/AbC123": page})
+    [j] = torre.Torre({"sitemaps_en": 2, "sitemaps_es": 0}).fetch()
+    assert not any("ZzZ999" in u or "Old111" in u for u in asked)          # never fetched
+    assert (j.source_id, j.company, j.remote) == ("AbC123", "Niuro", True)
+    assert j.tags == ["countries:Argentina, Ecuador"] and j.location == "Remote: Argentina, Ecuador"

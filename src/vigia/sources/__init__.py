@@ -10,9 +10,10 @@ from vigia.sources.indeed import Indeed
 from vigia.sources.linkedin import LinkedIn
 from vigia.sources.linkedin_posts import LinkedInPosts
 from vigia.sources.strider import Strider
+from vigia.sources.torre import Torre
 from vigia.sources.workday import Workday
 
 REGISTRY = {cls.name: cls for cls in
-            (GetOnBoard, Multitrabajos, Computrabajo, Indeed, Greenhouse, Ashby, Lever, Workday, Teamtailor, Workable, SmartRecruiters, Breezy,
+            (GetOnBoard, Torre, Multitrabajos, Computrabajo, Indeed, Greenhouse, Ashby, Lever, Workday, Teamtailor, Workable, SmartRecruiters, Breezy,
              Recruitee, Remotive, Himalayas, Jobicy, RemoteOK, HNWhoIsHiring, Strider, WorkingNomads,
              WeWorkRemotely, LinkedIn, LinkedInPosts)}

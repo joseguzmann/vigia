@@ -69,6 +69,7 @@ verdict, so the person only reads what survives.
 | `remotive`, `himalayas`, `jobicy`, `remoteok` | Remote job boards | public APIs |
 | `hn_whoishiring` | Hacker News monthly "Who is hiring?" thread | Algolia HN API |
 | `workingnomads`, `weworkremotely` | Remote job boards | JSON API / RSS |
+| `torre` | Torre: postings from its public sitemaps and pages, with the countries each accepts (its API is off-limits in robots.txt) | sitemaps + JSON-LD |
 | `strider` | LATAM-only marketplace; each role lists its accepted countries | job pages (schema.org) |
 | `linkedin` | LinkedIn's logged-out job search (optional, off by default) | public pages, rate-limited |
 | `linkedin_posts` | LinkedIn **hiring posts**, found via Google's index (Serper), read logged-out | Serper API key + public pages |

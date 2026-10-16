@@ -110,3 +110,17 @@ Chevyplan, KATU…) plus worldwide-remote roles listed in Ecuador (Tether, My VA
 Mexico and Argentina with the remote filter return mostly on-site roles, so they are left out.
 Indeed marks the work mode only when the employer sets it; without it the text decides, and a
 local posting that says nothing is on-site. Live test before deploying: 12 passed.
+
+## Torre — 2026-10-16
+
+The old public search (`search.torre.co/opportunities/_search`) answers "Invalid request" to every
+format tried, including the filters the current web app sends (`status`, `remote`, a
+personalized `bestfor`), and the app's own `/api/search/...` route needs its session. Torre's
+robots.txt also disallows `/api/` for bots, so the API is not used.
+
+What robots.txt allows is enough: `sitemap-index.xml` lists numbered sitemaps (the highest numbers
+are the newest), each with `torre.ai/post/<id>-<company>-<title>` and a last-modified date. The
+slug carries the title, so out-of-scope postings are skipped unfetched. Each posting page embeds a
+JobPosting with the text and `applicantLocationRequirements`. Measured: 1,234 postings in the
+last 30 days across the newest 3 English and 1 Spanish sitemaps, 115 in scope by slug; of a
+sample of 30, 10 listed Ecuador, 12 listed other countries only, 8 listed none.
