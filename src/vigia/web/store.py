@@ -228,3 +228,61 @@ def skip_reasons(c: sqlite3.Connection) -> list[tuple[str, int]]:
                         JOIN (SELECT job_id, MAX(id) id FROM actions GROUP BY job_id) m ON a.id = m.id
                         WHERE a.action = 'skipped' GROUP BY a.reason ORDER BY n DESC""")
     return [(r["reason"], r["n"]) for r in rows]
+
+
+# --- sources -------------------------------------------------------------------
+
+SOURCE_INFO = {
+    "getonbrd": ("Get on Board", "LATAM tech job board", "public API"),
+    "greenhouse": ("Greenhouse", "company job boards on this applicant-tracking system", "public API"),
+    "ashby": ("Ashby", "company job boards on this applicant-tracking system", "public API"),
+    "lever": ("Lever", "company job boards on this applicant-tracking system", "public API"),
+    "remotive": ("Remotive", "remote job board", "public API"),
+    "himalayas": ("Himalayas", "remote job board", "public API"),
+    "jobicy": ("Jobicy", "remote job board", "public API"),
+    "hn_whoishiring": ("Hacker News: Who is hiring?", "the monthly thread, one comment per posting", "Algolia API"),
+    "strider": ("Strider", "LATAM engineers for US companies", "HTML + JSON-LD"),
+    "workingnomads": ("Working Nomads", "remote job board", "public API"),
+    "weworkremotely": ("We Work Remotely", "remote job board", "RSS"),
+    "linkedin": ("LinkedIn jobs", "logged-out job search, slow and rotating", "public pages"),
+    "linkedin_posts": ("LinkedIn hiring posts", "posts found through Serper (Google's index)", "Serper API + public pages"),
+}
+
+
+def sources_overview(c: sqlite3.Connection, registry, cfg_for) -> list[dict]:
+    """One row per source: config, last run, jobs it has seen and applications they led to."""
+    seen: dict[str, dict] = defaultdict(lambda: {"jobs": 0, "fit": 0, "extra": 0, "review": 0, "out": 0, "fresh": 0})
+    job_sources: dict[int, list[str]] = {}
+    for r in c.execute("SELECT id, verdict, seen_in, posted_at, flags FROM jobs"):
+        names = sorted({s["source"] for s in json.loads(r["seen_in"] or "[]")})
+        job_sources[r["id"]] = names
+        age = age_days(r)
+        for n in names:
+            seen[n]["jobs"] += 1
+            seen[n][r["verdict"] or "out"] += 1
+            if age is not None and age <= 7 and r["verdict"] in ("fit", "extra"):
+                seen[n]["fresh"] += 1
+    applied: dict[str, int] = defaultdict(int)
+    for r in c.execute("SELECT job_id FROM applications WHERE job_id IS NOT NULL"):
+        for n in job_sources.get(r["job_id"], []):
+            applied[n] += 1
+    week = c.execute("""SELECT source, COUNT(*) runs, SUM(new) new, SUM(error IS NOT NULL AND error != '') errors
+                        FROM runs WHERE started_at >= datetime('now', '-7 days') GROUP BY source""")
+    week = {r["source"]: dict(r) for r in week}
+    out = []
+    for name in registry:
+        cfg = cfg_for(name)
+        last = c.execute("SELECT * FROM runs WHERE source = ? ORDER BY id DESC LIMIT 1", (name,)).fetchone()
+        label, what, how = SOURCE_INFO.get(name, (name, "", ""))
+        searches = cfg.get("boards") or cfg.get("queries") or cfg.get("phrases") or []
+        searches = [q.get("keywords", "") + (f" · {q['location']}" if q.get("location") else "")
+                    if isinstance(q, dict) else str(q) for q in searches]
+        out.append({
+            "name": name, "label": label, "what": what, "how": how,
+            "enabled": bool(cfg.get("enabled")), "every": cfg.get("every_minutes"),
+            "boards": bool(cfg.get("boards")), "searches": searches,
+            "last": dict(last) if last else None, "week": week.get(name, {"runs": 0, "new": 0, "errors": 0}),
+            **seen[name], "applied": applied.get(name, 0),
+        })
+    out.sort(key=lambda s: (not s["enabled"], -(s["fit"] + s["extra"]), s["name"]))
+    return out

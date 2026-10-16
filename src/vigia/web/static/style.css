@@ -85,3 +85,4 @@ select.outcome.rejected, select.outcome.ghost, select.outcome.closed { color: va
 .report table { width: auto; min-width: 50%; margin-bottom: 10px; }
 .report h2 { font-size: 20px; }
 .report { margin-bottom: 20px; }
+.err { color: #b42318; }

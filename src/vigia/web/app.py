@@ -147,6 +147,15 @@ def create_app() -> FastAPI:
         return templates.TemplateResponse(request, "experiment.html", {
             "page": "experiment", "s": apps.stats(c), "skips": store.skip_reasons(c)})
 
+    @app.get("/sources")
+    def sources(request: Request, c=Depends(get_conn)):
+        from vigia import config
+        rows = store.sources_overview(c, REGISTRY, config.source)
+        return templates.TemplateResponse(request, "sources.html", {
+            "page": "sources", "sources": rows,
+            "enabled": sum(s["enabled"] for s in rows),
+            "boards": sum(len(s["searches"]) for s in rows if s["boards"] and s["enabled"])})
+
     @app.get("/health")
     def health(request: Request, c=Depends(get_conn), source: str = "linkedin", hours: int = 72):
         if source not in REGISTRY:

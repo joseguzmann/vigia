@@ -139,3 +139,19 @@ def test_health_page(client):
     assert r.status_code == 200
     assert "<table>" in r.text and "429 episodes" in r.text
     assert client.get("/healthz").text == "ok"
+
+
+def test_sources_page(client):
+    job_id = add_job("AI Engineer", "Acme", "fit", source="ashby", age=1)
+    add_job("Sales Lead", "Initech", "out", source="ashby")
+    run = db.start_run("ashby")
+    db.finish_run(run, 40, 2)
+    apps.add(job_id=job_id, variant="A1", c=store.connect())
+    r = client.get("/sources")
+    assert r.status_code == 200
+    assert "Ashby" in r.text and "We Work Remotely" in r.text
+    ashby = next(s for s in store.sources_overview(store.connect(), __import__("vigia.sources", fromlist=["REGISTRY"]).REGISTRY,
+                                                    __import__("vigia.config", fromlist=["source"]).source)
+                 if s["name"] == "ashby")
+    assert (ashby["jobs"], ashby["fit"], ashby["fresh"], ashby["applied"]) == (2, 1, 1, 1)
+    assert ashby["last"]["fetched"] == 40 and ashby["boards"] and "truelogic" in ashby["searches"]
