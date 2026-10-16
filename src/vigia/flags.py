@@ -135,7 +135,9 @@ ANYWHERE_RE = re.compile(
 LATAM_RE = re.compile(r"\b" + LATAM + r"\b", re.I)
 OFFICE_RE = re.compile(r"\bhybrid\b|\bh[ií]brido\b|\bon-?site\b|\bin-office\b|\bpresencial\b", re.I)
 GENERIC_REMOTE = {"", "remote", "remote job", "anywhere", "worldwide", "global", "fully remote",
-                  "remote, global", "remote, global (remote)", "remote (global)", "worldwide (remote)"}
+                  "remote, global", "remote (global)", "100% remote", "remoto", "remota", "100% remoto",
+                  "trabajo remoto", "teletrabajo", "remoto (global)"}
+TAG_REMOTE_RE = re.compile(r"\s*\((?:remote|remoto)\)\s*$")
 POST_PLACE_RE = re.compile(
     r"\b(?:us|usa|u\.s\.|united states|canada|uk|united kingdom|europe|emea|india|pakistan|"
     r"philippines|australia|germany|london|new york|nyc|san francisco|sf bay|bangalore|bengaluru|"
@@ -149,6 +151,9 @@ def region(job: Job, profile: dict) -> tuple[str, str]:
     regions = [r.lower() for r in profile.get("eligible_regions", [])]
     specific = [r for r in regions if r not in GENERIC_WORDS]
     loc = (job.location or "").lower().strip()
+    # Several sources append "(Remote)" to the place they give: "Remote job (Remote)" is
+    # still no place at all.
+    loc = TAG_REMOTE_RE.sub("", loc).strip() if TAG_REMOTE_RE.sub("", loc).strip() in GENERIC_REMOTE else loc
     text = f"{job.title}\n{job.description}"
 
     office = OFFICE_RE.search(f"{job.title} {job.location}")

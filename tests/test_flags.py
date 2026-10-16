@@ -257,3 +257,15 @@ def test_abroad_with_visa_is_extra(profile):
     assert evaluate(j, profile)[0] == "extra"
     j.description = "Python backend role in Berlin. We do not provide visa sponsorship."
     assert evaluate(j, profile)[0] == "out"
+
+
+def test_generic_remote_locations_in_other_words(profile):
+    from vigia.flags import region
+    from vigia.models import Job
+    for loc in ("Remote job (Remote)", "Remoto", "100% remoto", "Remote (Remote)"):
+        job = Job(source="recruitee", source_id="1", title="Fullstack Developer", company="Aerolab",
+                  url="https://x", location=loc, remote=True, description="Build web apps.")
+        assert region(job, profile)[0] == "ok", loc
+    job = Job(source="breezy", source_id="2", title="Python Developer", company="Flux IT",
+              url="https://y", location="Argentina (Remote)", remote=True, description="Python.")
+    assert region(job, profile)[0] == "restricted"
