@@ -161,7 +161,12 @@ def region(job: Job, profile: dict) -> tuple[str, str]:
     text = f"{job.title}\n{job.description}"
 
     office = OFFICE_RE.search(f"{job.title} {job.location}") or LI_OFFICE_RE.search(job.description or "")
+    home_place = next((h for h in [profile.get("home_country"), *profile.get("home_cities", [])]
+                       if h and h.lower() in loc), None)
     if office:
+        # On-site or hybrid where the candidate lives is fine: it is only "office-bound" elsewhere.
+        if home_place:
+            return "ok", f"office in {home_place}"
         return "restricted", f"office-bound: {office.group(0)}"
     # An explicit country list from the source (Strider, Get on Board) is authoritative:
     # "LATAM" there often means 9 countries, and Ecuador is not always one of them.

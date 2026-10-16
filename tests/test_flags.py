@@ -280,3 +280,15 @@ def test_workday_form_fields_are_not_offers(profile):
               url="https://x", location="Cork, Ireland", description=text)
     assert region(job, profile)[0] == "restricted"
     assert evaluate(job, profile)[0] == "out"
+
+
+def test_office_where_the_candidate_lives_is_fine(profile):
+    from vigia.flags import region
+    from vigia.models import Job
+    profile = {**profile, "home_country": "Ecuador", "home_cities": ["Quito"]}
+    quito = Job(source="linkedin", source_id="1", title="Desarrollador Web Senior (PRESENCIAL - QUITO)",
+                company="Construex", url="https://x", location="Quito, Pichincha, Ecuador", description="React.")
+    assert region(quito, profile) == ("ok", "office in Ecuador")
+    lima = Job(source="linkedin", source_id="2", title="Desarrollador Web (Presencial)", company="X",
+               url="https://y", location="Lima, Peru", description="React.")
+    assert region(lima, profile)[0] == "restricted"

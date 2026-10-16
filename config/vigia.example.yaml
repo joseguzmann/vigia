@@ -34,6 +34,8 @@ profile:
   # Country the candidate lives in. When a source lists the exact countries a remote role
   # accepts, the role is eligible only if this country is on the list.
   home_country: Ecuador
+  # On-site or hybrid roles here are fine (the rest of the world counts as office-bound).
+  home_cities: []
 
   # Where the candidate can work from. A job is eligible if its location or text
   # mentions one of these, or if it is remote with no stated restriction.
