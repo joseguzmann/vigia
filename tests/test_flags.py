@@ -269,3 +269,14 @@ def test_generic_remote_locations_in_other_words(profile):
     job = Job(source="breezy", source_id="2", title="Python Developer", company="Flux IT",
               url="https://y", location="Argentina (Remote)", remote=True, description="Python.")
     assert region(job, profile)[0] == "restricted"
+
+
+def test_workday_form_fields_are_not_offers(profile):
+    from vigia.flags import evaluate, region
+    from vigia.models import Job
+    text = ("Build RF systems in Python.\n#LI-Onsite\nTravel Requirements None\nRelocation Provided None\n"
+            "Position Type Experienced")
+    job = Job(source="workday", source_id="1", title="Senior Software Engineer", company="Motorola Solutions",
+              url="https://x", location="Cork, Ireland", description=text)
+    assert region(job, profile)[0] == "restricted"
+    assert evaluate(job, profile)[0] == "out"

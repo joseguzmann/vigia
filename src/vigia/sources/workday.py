@@ -91,7 +91,9 @@ class Workday(Source):
                     job.posted_at = parse_date(detail.get("startDate")) or job.posted_at
                     job.url = detail.get("externalUrl") or job.url
                     org = full.get("hiringOrganization") or {}
-                    job.company = org.get("name") if isinstance(org, dict) and org.get("name") else tenant
+                    name = org.get("name") if isinstance(org, dict) else ""
+                    # Legal entities come with a cost-center code: "957100 Motorola Solutions Ireland Limited".
+                    job.company = re.sub(r"^\d+\s+", "", name or "") or tenant
                     if "remote" in (job.location or "").lower():
                         job.remote = True
             out.append(job)

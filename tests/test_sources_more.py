@@ -126,7 +126,7 @@ def test_workday_searches_and_reads_only_new_in_scope_postings(monkeypatch):
          "postedOn": "Posted Today"}]}
     detail = {"jobPostingInfo": {"jobDescription": "<p>Python and LLM agents</p>", "location": "Remote, Latin America",
                                  "startDate": "2026-10-12", "externalUrl": "https://stord.wd503.myworkdayjobs.com/x/job/SSE"},
-              "hiringOrganization": {"name": "Stord"}}
+              "hiringOrganization": {"name": "583000 Stord"}}
     posts, gets = [], []
     monkeypatch.setattr(http, "post_json", lambda s, k, url, payload: posts.append(payload["searchText"]) or listing)
     monkeypatch.setattr(http, "get_json", lambda s, k, url, **kw: gets.append(url) or detail)

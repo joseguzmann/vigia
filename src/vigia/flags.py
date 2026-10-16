@@ -38,7 +38,11 @@ VISA_RE = re.compile(
     r"relocation (?:support|assistance|package|bonus)|relocate to|relocation (?:is )?(?:available|provided|offered)|"
     r"open to relocat|willing to relocate|patrocinio de visa|reubicaci[oó]n", re.I)
 NO_VISA_RE = re.compile(r"(?:not|unable to|cannot|can't|don't|do not|will not|won't) (?:provide |offer )?(?:visa )?sponsor|"
-                        r"no (?:visa )?sponsorship|sponsorship is not|without (?:the need for )?sponsorship", re.I)
+                        r"no (?:visa )?sponsorship|sponsorship is not|without (?:the need for )?sponsorship|"
+                        # Workday's form field "Relocation Provided: None" is not an offer.
+                        r"relocation provided:?\s*(?:none|no)\b|relocation:?\s*(?:none|no|not provided)\b", re.I)
+# LinkedIn's posting tags, which many ATS copy into the text: an on-site or hybrid role.
+LI_OFFICE_RE = re.compile(r"#LI-(?:Onsite|Hybrid)\b", re.I)
 
 RESTRICTION_RE = re.compile(
     r"(?:must|required\s+to|need\s+to|needs\s+to|have\s+to)\s+(?:be\s+)?"
@@ -156,7 +160,7 @@ def region(job: Job, profile: dict) -> tuple[str, str]:
     loc = TAG_REMOTE_RE.sub("", loc).strip() if TAG_REMOTE_RE.sub("", loc).strip() in GENERIC_REMOTE else loc
     text = f"{job.title}\n{job.description}"
 
-    office = OFFICE_RE.search(f"{job.title} {job.location}")
+    office = OFFICE_RE.search(f"{job.title} {job.location}") or LI_OFFICE_RE.search(job.description or "")
     if office:
         return "restricted", f"office-bound: {office.group(0)}"
     # An explicit country list from the source (Strider, Get on Board) is authoritative:
