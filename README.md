@@ -61,6 +61,8 @@ verdict, so the person only reads what survives.
 | Source | What it covers | Access |
 |---|---|---|
 | `getonbrd` | Get on Board, the tech job board most used by LATAM companies | public API |
+| `multitrabajos`, `computrabajo` | Ecuador's local boards: the whole IT area / searches by role, with the work mode | web app API / HTML + JSON-LD |
+| `workday` | Career sites of large companies, searched for development roles | public JSON |
 | `greenhouse`, `ashby`, `lever` | Career pages of companies you choose to watch | public APIs |
 | `teamtailor`, `workable`, `smartrecruiters`, `breezy`, `recruitee` | More company career pages, on other applicant-tracking systems | RSS / public APIs (Breezy: job page) |
 | `remotive`, `himalayas`, `jobicy`, `remoteok` | Remote job boards | public APIs |

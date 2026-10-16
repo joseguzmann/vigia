@@ -83,3 +83,20 @@ False signals found and fixed: Workday's form field "Relocation Provided: None" 
 offer (20 Motorola roles marked *extra*), and `#LI-Onsite` / `#LI-Hybrid` in the text now mean
 office-bound. Legal-entity names come with a cost-center code ("957100 Motorola Solutions Ireland
 Limited"), now dropped.
+
+## Ecuador's local boards — 2026-10-16
+
+- **Multitrabajos** (Bumeran network, site id `BMEC`): the web app calls
+  `POST /api/avisos/searchV2?pageSize=100&page=N&sort=RECIENTES` with
+  `{"filtros":[{"id":"area","value":"tecnologia-sistemas-y-telecomunicaciones"}], "tipoDetalle":"full", ...}`.
+  It answers 403 without the cookies of a page load; with them (plus `Origin`/`Referer` and
+  `x-site-id`) it returns every IT posting in the country with its full text, city and
+  `modalidadTrabajo` (Presencial / Híbrido / Remoto). 146 postings on the first run.
+- **Computrabajo Ecuador**: server-rendered search pages `/trabajo-de-<query>?pubdate=<days>&p=<n>`,
+  20 cards each with title, company, city, salary, work mode and age. The full text is the
+  posting's JobPosting JSON-LD, or the "Descripción de la oferta" section when a page has none.
+  The market is small: "desarrollador" has ~31 open postings, ~9 from the last 15 days.
+
+**First run:** 172 postings, 6 passed (on-site or hybrid in Quito, or remote). Most of the rest are
+IT support, infrastructure or analyst roles (title out of scope), or on-site in Guayaquil, Loja, etc.
+On-site/hybrid now passes only in `profile.home_cities` (with none set, in `home_country`).
