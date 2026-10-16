@@ -295,3 +295,14 @@ def test_office_where_the_candidate_lives_is_fine(profile):
     lima = Job(source="linkedin", source_id="2", title="Desarrollador Web (Presencial)", company="X",
                url="https://y", location="Lima, Peru", description="React.")
     assert region(lima, profile)[0] == "restricted"
+
+
+def test_visa_and_relocation_wording(profile):
+    from vigia.flags import NO_VISA_RE, VISA_RE
+    def offer(text):
+        return bool(VISA_RE.search(text)) and not NO_VISA_RE.search(text)
+    assert offer("Relocation is available for candidates who require it.")
+    assert offer("We offer visa sponsorship and a relocation package.")
+    assert not offer("**Visa Sponsorship:** Not available")
+    assert not offer("SF-based or willing to relocate immediately.")
+    assert not offer("Visa Sponsorship Details: Open to visa transfers (e.g. OPT, H1B transfers)")

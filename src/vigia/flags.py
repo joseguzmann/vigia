@@ -35,12 +35,17 @@ YEARS_NOISE_RE = re.compile(r"(over|for|since|founded|history|ago|in business|le
 # Roles abroad that bring the candidate there: these become "extra" instead of "out".
 VISA_RE = re.compile(
     r"visa sponsorship|sponsor(?:ship)? (?:is )?(?:available|provided|offered)|we (?:can |will )?sponsor|"
-    r"relocation (?:support|assistance|package|bonus)|relocate to|relocation (?:is )?(?:available|provided|offered)|"
-    r"open to relocat|willing to relocate|patrocinio de visa|reubicaci[oó]n", re.I)
+    r"relocation (?:support|assistance|package|bonus)|relocation (?:is )?(?:available|provided|offered)|"
+    r"we (?:will |can )?relocate you|patrocinio de visa|reubicaci[oó]n", re.I)
+# Not offers: "willing to relocate" / "relocate to SF" ask the candidate to move on their own.
 NO_VISA_RE = re.compile(r"(?:not|unable to|cannot|can't|don't|do not|will not|won't) (?:provide |offer )?(?:visa )?sponsor|"
                         r"no (?:visa )?sponsorship|sponsorship is not|without (?:the need for )?sponsorship|"
                         # Workday's form field "Relocation Provided: None" is not an offer.
-                        r"relocation provided:?\s*(?:none|no)\b|relocation:?\s*(?:none|no|not provided)\b", re.I)
+                        r"relocation provided:?\s*(?:none|no)\b|relocation:?\s*(?:none|no|not provided)\b|"
+                        # "Visa Sponsorship: Not available"; "open to visa transfers (H1B transfers)" only
+                        # helps someone already holding a visa there.
+                        r"sponsorship(?: details)?[:*\s]*(?:is\s+)?(?:not available|unavailable|none|no)\b|"
+                        r"(?:visa|h-?1b) transfers?", re.I)
 # LinkedIn's posting tags, which many ATS copy into the text: an on-site or hybrid role.
 LI_OFFICE_RE = re.compile(r"#LI-(?:Onsite|Hybrid)\b", re.I)
 
