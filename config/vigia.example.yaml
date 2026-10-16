@@ -102,6 +102,16 @@ sources:
     enabled: true
     every_minutes: 360
     boards: [tekton, oowlish, toptal, kavak]
+  workday:
+    # Large companies: searched with `queries`, full text fetched only for new in-scope titles.
+    enabled: true
+    every_minutes: 720
+    boards: [stord/wd503/Stord_External_Career, proofpoint/wd5/ProofpointCareers, netflix/wd108/Netflix,
+             motorolasolutions/wd5/Careers, transnetwork/wd108/Transnetwork_Jobs, dxctechnology/wd1/DXCJobs,
+             nvidia/wd5/NVIDIAExternalCareerSite, chevron/wd5/jobs, santander/wd3/SantanderCareers,
+             salesforce/wd12/External_Career_Site, iqvia/wd1/iqvia, autodesk/wd1/Ext, jj/wd5/JJ,
+             tsys/wd1/TSYS, rocket/wd5/rocket_careers, capitalone/wd12/Capital_One,
+             assurant/wd1/Assurant_Careers, disney/wd5/disneycareer, mastercard/wd1/CorporateCareers]
   # More ATS (found 2026-10-15 by probing remote and LATAM companies; see docs/sources-research.md).
   teamtailor:
     enabled: true

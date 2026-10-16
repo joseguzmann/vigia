@@ -237,6 +237,7 @@ SOURCE_INFO = {
     "greenhouse": ("Greenhouse", "company job boards on this applicant-tracking system", "public API"),
     "ashby": ("Ashby", "company job boards on this applicant-tracking system", "public API"),
     "lever": ("Lever", "company job boards on this applicant-tracking system", "public API"),
+    "workday": ("Workday", "career sites of large companies; searched, not read whole", "public JSON"),
     "teamtailor": ("Teamtailor", "company career sites on this applicant-tracking system", "RSS"),
     "workable": ("Workable", "company job boards on this applicant-tracking system", "public widget API"),
     "smartrecruiters": ("SmartRecruiters", "company job boards on this applicant-tracking system", "public API"),

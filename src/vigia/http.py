@@ -68,3 +68,29 @@ def get_json(source: str, kind: str, url: str, *, params: dict | None = None):
         return resp.json()
     except ValueError:
         return None
+
+
+def post_json(source: str, kind: str, url: str, payload: dict):
+    """POST a JSON body and parse the JSON answer. Logged and retried like `get`; raises
+    Throttled on 429; None on any other failure."""
+    resp, status = None, 0
+    for attempt in range(RETRIES + 1):
+        started = time.monotonic()
+        status = 0
+        try:
+            resp = _session.post(url, json=payload, timeout=TIMEOUT, headers={"Accept": "application/json"})
+            status = resp.status_code
+        except requests.RequestException:
+            resp = None
+        db.log_request(source, kind, status, int((time.monotonic() - started) * 1000))
+        if status != 0:
+            break
+        time.sleep(2 * (attempt + 1))
+    if status == 429:
+        raise Throttled(f"{source}: 429 on {kind}")
+    if resp is None or status >= 300:
+        return None
+    try:
+        return resp.json()
+    except ValueError:
+        return None

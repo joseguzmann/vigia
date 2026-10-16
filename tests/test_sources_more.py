@@ -113,3 +113,37 @@ def test_remoteok_skips_the_terms_and_fixes_encoding(monkeypatch):
          "tags": ["react native"]}]})
     [j] = boards.RemoteOK({}).fetch()
     assert j.description == "Qué es Deazy" and j.salary == "USD 60,000–90,000/year" and j.location == "LATAM"
+
+
+def test_workday_searches_and_reads_only_new_in_scope_postings(monkeypatch):
+    from vigia import db
+    from vigia.sources import workday
+    listing = {"total": 3, "jobPostings": [
+        {"title": "Senior Software Engineer", "externalPath": "/job/Remote-Latin-America/SSE_JR1",
+         "locationsText": "Remote, Latin America", "postedOn": "Posted 3 Days Ago"},
+        {"title": "Accountant", "externalPath": "/job/Quito/Accountant_JR2", "locationsText": "Quito"},
+        {"title": "Backend Developer", "externalPath": "/job/Montevideo/BD_JR3", "locationsText": "Montevideo, Uruguay",
+         "postedOn": "Posted Today"}]}
+    detail = {"jobPostingInfo": {"jobDescription": "<p>Python and LLM agents</p>", "location": "Remote, Latin America",
+                                 "startDate": "2026-10-12", "externalUrl": "https://stord.wd503.myworkdayjobs.com/x/job/SSE"},
+              "hiringOrganization": {"name": "Stord"}}
+    posts, gets = [], []
+    monkeypatch.setattr(http, "post_json", lambda s, k, url, payload: posts.append(payload["searchText"]) or listing)
+    monkeypatch.setattr(http, "get_json", lambda s, k, url, **kw: gets.append(url) or detail)
+    db.conn().execute("INSERT INTO jobs(dedupe_key, source, source_id, title, company, url, first_seen, last_seen) "
+                      "VALUES ('k', 'workday', 'stord/job/Montevideo/BD_JR3', 'Backend Developer', 'Stord', 'u', 'x', 'x')")
+    jobs = workday.Workday({"boards": ["stord/wd503/Stord_External_Career"], "queries": ["engineer", "python"]}).fetch()
+    assert posts == ["engineer", "python"]
+    assert sorted(j.title for j in jobs) == ["Backend Developer", "Senior Software Engineer"]  # no Accountant
+    assert len(gets) == 1 and gets[0].endswith("/wday/cxs/stord/Stord_External_Career/job/Remote-Latin-America/SSE_JR1")
+    assert next(j for j in jobs if j.title == "Backend Developer").company == "Stord"  # the stored name
+    sse = next(j for j in jobs if j.title == "Senior Software Engineer")
+    assert (sse.company, sse.remote, sse.description) == ("Stord", True, "Python and LLM agents")
+    assert sse.posted_at.date().isoformat() == "2026-10-12"
+
+
+def test_workday_posted_on():
+    from vigia.sources.workday import posted_on
+    assert posted_on("Posted Today") and posted_on("Posted Yesterday")
+    assert (posted_on("Posted 30+ Days Ago") < posted_on("Posted 3 Days Ago"))
+    assert posted_on("") is None
