@@ -102,6 +102,31 @@ sources:
     enabled: true
     every_minutes: 360
     boards: [tekton, oowlish, toptal, kavak]
+  # More ATS (found 2026-10-15 by probing remote and LATAM companies; see docs/sources-research.md).
+  teamtailor:
+    enabled: true
+    every_minutes: 360
+    boards: [avenga, next, yonder, two, headway, akka, betterfly, varnish-software]
+  workable:
+    enabled: true
+    every_minutes: 360
+    boards: [platzi, on-the-go-systems, recurly]
+  smartrecruiters:
+    enabled: true
+    every_minutes: 360
+    boards: [endava, appen, skyrocketventures, uruit, testgorilla, firstpoint, timedoctor, nearform,
+             sezzle, intevity, kinsta, dribbble, wovenware, bluecoding, oowlish, fiverr]
+  breezy:
+    enabled: true
+    every_minutes: 360
+    boards: [fluxit, boldare, gaggle, bear-group, cal-com, tekton]
+  recruitee:
+    enabled: true
+    every_minutes: 360
+    boards: [namecheap, aerolab, crazygames, ifit, testgorilla, coursera]
+  remoteok:
+    enabled: true
+    every_minutes: 360
   remotive:
     enabled: true
     every_minutes: 240

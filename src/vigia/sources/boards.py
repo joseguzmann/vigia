@@ -143,3 +143,37 @@ def _rss_date(value):
         return parsedate_to_datetime(value) if value else None
     except (TypeError, ValueError):
         return None
+
+
+class RemoteOK(Source):
+    """One public JSON feed of every recent posting. The first element is the API's terms
+    (they ask for a followed link back, which the report gives: each job keeps its URL)."""
+    name = "remoteok"
+
+    def fetch(self) -> list[Job]:
+        data = http.get_json(self.name, "feed", "https://remoteok.com/api")
+        out = []
+        for j in data if isinstance(data, list) else []:
+            if not isinstance(j, dict) or not j.get("id"):
+                continue
+            lo, hi = j.get("salary_min") or 0, j.get("salary_max") or 0
+            out.append(Job(
+                source=self.name, source_id=str(j["id"]), title=_fix_text(j.get("position", "")),
+                company=_fix_text(j.get("company", "")), url=j.get("url") or j.get("apply_url") or "",
+                location=_fix_text(j.get("location") or ""), remote=True,
+                posted_at=parse_date(j.get("date") or j.get("epoch")),
+                description=strip_html(_fix_text(j.get("description") or "")),
+                salary=f"USD {lo:,}–{hi:,}/year" if lo and hi else "",
+                tags=[str(t) for t in j.get("tags") or []],
+            ))
+        return out
+
+
+def _fix_text(text: str) -> str:
+    """RemoteOK serves some UTF-8 text decoded as Latin-1 ("QuÃ©" for "Qué")."""
+    if "Ã" in text or "â€" in text:
+        try:
+            return text.encode("latin-1").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            return text
+    return text
