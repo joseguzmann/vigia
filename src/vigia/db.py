@@ -175,7 +175,10 @@ def upsert_job(job, verdict: str, score: int, flags: dict) -> bool:
     # The same role can arrive again from another board, or as another country's copy of
     # the posting. Keep the version that is best for the candidate (e.g. the "LATAM" copy
     # over the "Brazil" one); otherwise keep the richer description.
-    better = RANK.get(verdict, 0) > RANK.get(row["verdict"], 0)
+    # A copy without text cannot win: judged blind it often looks "review", above a stored
+    # "out" that was judged on the full description (seen 2026-10-16 with Workday re-runs).
+    better = (RANK.get(verdict, 0) > RANK.get(row["verdict"], 0)
+              and (bool(job.description) or not row["description"]))
     longer = len(job.description or "") > len(row["description"] or "")
     if better:
         c.execute("""UPDATE jobs SET last_seen = ?, seen_in = ?, url = ?, location = ?, remote = ?,

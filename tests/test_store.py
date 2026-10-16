@@ -93,3 +93,11 @@ def test_full_description_can_make_the_verdict_worse():
     card.description = "5+ years of professional Software Development experience."
     db.upsert_job(card, "out", 2, {"reasons": ["asks 5+ years"]})
     assert db.all_jobs()[0]["verdict"] == "out"
+
+
+def test_a_copy_without_text_does_not_override_a_judged_one():
+    full = make("workday", "https://a", "Asks 8+ years of experience. Remote, Latin America.")
+    db.upsert_job(full, "out", 1, {"reasons": ["asks 8+ years"]})
+    db.upsert_job(make("workday", "https://a", ""), "review", 3, {"reasons": ["no description yet"]})
+    row = db.all_jobs()[0]
+    assert row["verdict"] == "out" and "8+ years" in row["description"]
