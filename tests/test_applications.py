@@ -156,3 +156,18 @@ def test_mcp_tools_work_on_the_same_database():
     assert "applied #1" in mcp_server.new_jobs(since="2000-01-01T00:00:00+00:00")
     assert mcp_server.experiment_stats()["total"]["applied"] == 1
     assert "Acme" in mcp_server.export_applications_markdown()
+
+
+def test_mcp_tools_run_from_worker_threads():
+    """The server calls tools on worker threads: none may hit a thread-bound connection."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from vigia import mcp_server
+    mcp_server._conn = None
+    db.use(db.path())  # a fresh module connection, opened on this thread
+    db.conn()
+    with ThreadPoolExecutor(1) as ex:
+        assert "Reviewed up to" in ex.submit(mcp_server.mark_reviewed).result()
+        assert "health" in ex.submit(mcp_server.health).result()
+        assert "new since" in ex.submit(mcp_server.new_jobs).result()
+    mcp_server._conn = None

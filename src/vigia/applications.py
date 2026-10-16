@@ -118,8 +118,10 @@ def _posting_age(job: sqlite3.Row, on: str | None) -> int | None:
         return None
     if posted.tzinfo is None:
         posted = posted.replace(tzinfo=timezone.utc)
-    when = datetime.fromisoformat(on).replace(tzinfo=timezone.utc) if on else datetime.now(timezone.utc)
-    return max(0, (when.date() - posted.date()).days)
+    # Applied today (a local date) is measured from now, so local and UTC dates are not mixed.
+    if not on or on == date.today().isoformat():
+        return max(0, (datetime.now(timezone.utc) - posted).days)
+    return max(0, (date.fromisoformat(on) - posted.date()).days)
 
 
 def find_job(url: str, c: sqlite3.Connection | None = None) -> sqlite3.Row | None:

@@ -19,7 +19,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from vigia import applications as apps
-from vigia import report
+from vigia import db, report
 from vigia.web import store
 
 mcp = MCPServer("vigia", instructions=(
@@ -52,6 +52,9 @@ def _c():
     global _conn
     if _conn is None:
         _conn = store.connect()
+        # report.* and db.* use the module connection, which by default refuses to be used from
+        # another thread; tool calls run on worker threads, so lend them this one.
+        db._conn = _conn
     return _conn
 
 
@@ -66,6 +69,7 @@ def _job_summary(j: dict) -> dict:
 @tool
 def health() -> str:
     """Last run of every source, errors, and how many jobs are stored per verdict."""
+    _c()
     return report.health()
 
 
@@ -74,12 +78,14 @@ def new_jobs(since: str | None = None, limit: int = 40, include_out: bool = Fals
     """Jobs first seen since the last review (or since an ISO timestamp), freshest first,
     grouped by verdict. Each one shows its job id and whether it was already applied to.
     Does not move the review point: call mark_reviewed after going through them."""
+    _c()
     return report.new_jobs(since=since, include_out=include_out, limit=limit)
 
 
 @tool
 def mark_reviewed() -> str:
     """Set the review point to now, so the next new_jobs starts from here."""
+    _c()
     report.mark_reviewed()
     return f"Reviewed up to {report.last_review()}"
 
