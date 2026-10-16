@@ -66,3 +66,20 @@ with at least one live posting: Teamtailor 8 (228 postings), Workable 4 (172), S
 boards are mostly European offices (Avenga, Endava), hybrid roles in Buenos Aires or Medellín,
 or old postings left open for years. The run surfaced a rule bug: a location of "Remote job
 (Remote)" or "Remoto" was read as a specific place; fixed, and the re-judge moved 93 stored jobs.
+
+## Workday — 2026-10-16
+
+Public JSON behind every career site: `POST https://<tenant>.wd<N>.myworkdayjobs.com/wday/cxs/<tenant>/<site>/jobs`
+(`{"searchText", "limit", "offset", "appliedFacets"}`) and `GET .../<site><externalPath>` for the full text.
+
+Sites were found with 20 Serper searches (`site:myworkdayjobs.com Ecuador`, `... Quito`, `... LATAM remote
+engineer`, ...): 95 sites, 88 answering. Each was searched for development roles: 24 had in-scope roles
+in LATAM or remote, 19 kept. **Workday is large companies hiring per office** (Mexico City, Buenos
+Aires, Bogotá, São Paulo, US-remote). First run: 437 postings, 373 new, 1,102 requests, no 429s; after
+fixing two false signals, 1 passed (a visa role to review). Stord's one "Remote, Latin America" role
+asks 5+ years and was 227 days old.
+
+False signals found and fixed: Workday's form field "Relocation Provided: None" read as a relocation
+offer (20 Motorola roles marked *extra*), and `#LI-Onsite` / `#LI-Hybrid` in the text now mean
+office-bound. Legal-entity names come with a cost-center code ("957100 Motorola Solutions Ireland
+Limited"), now dropped.
