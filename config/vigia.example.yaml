@@ -90,6 +90,15 @@ sources:
     enabled: true
     every_minutes: 180
     queries: [llm, ai engineer, langchain, agentes, python, backend, django]
+  # Ecuador's local market. On-site/hybrid only pass in profile.home_cities.
+  multitrabajos:
+    enabled: true
+    every_minutes: 240
+    areas: [tecnologia-sistemas-y-telecomunicaciones]
+  computrabajo:
+    enabled: true
+    every_minutes: 240
+    pubdate: 30
   # Company boards: companies that hire remotely in LATAM, plus remote-first AI companies.
   greenhouse:
     enabled: true

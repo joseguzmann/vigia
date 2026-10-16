@@ -147,3 +147,59 @@ def test_workday_posted_on():
     assert posted_on("Posted Today") and posted_on("Posted Yesterday")
     assert (posted_on("Posted 30+ Days Ago") < posted_on("Posted 3 Days Ago"))
     assert posted_on("") is None
+
+
+CT_CARD = """<article class="box_offer sel " data-id='2058CFB32A1C25CC61373E686DCF3405' data-blind="false">
+ <h2 class="fs18 fwB prB"> <a class="js-o-link fc_base" href="/ofertas-de-trabajo/oferta-de-trabajo-de-desarrollador-de-ia-en-quito-2058CFB32A1C25CC61373E686DCF3405#lc=ListOffers-Score4-0"> Desarrollador de IA </a></h2>
+ <p class="dFlex vm_fx fs16 fc_base mt5"><a class="fc_base t_ellipsis" href="https://ec.computrabajo.com/empresas/x" target='_blank' offer-grid-article-company-url> i-Route Solutions </a></p>
+ <p class="fs16 fc_base mt5"> <span class="mr10"> Quito, Pichincha </span> </p>
+ <div><span>2.300,00 US$ (Mensual)</span></div><div><span>Presencial y remoto</span></div>
+ <p class="fs13 fc_aux mt15"> Hace 23 horas </p></article>"""
+
+
+def test_computrabajo_card_and_page_fallback(monkeypatch):
+    from vigia.sources import ecuador
+    page = ("<html><h3>Descripción de la oferta</h3><p>Agentes con LangChain.</p><h3>Requerimientos</h3>"
+            "<p>3 años de experiencia</p><div>Aptitudes asociadas a esta oferta</div><p>Aws</p></html>")
+    serve(monkeypatch, {"trabajo-de-python": CT_CARD.encode(), "oferta-de-trabajo-de-desarrollador-de-ia": page.encode()})
+    [j] = ecuador.Computrabajo({"queries": ["python"], "pages": 1}).fetch()
+    assert (j.title, j.company, j.salary) == ("Desarrollador de IA", "i-Route Solutions", "2.300,00 US$ (Mensual)")
+    assert j.location == "Quito, Pichincha, Ecuador · hybrid" and j.remote is False
+    assert j.url.startswith("https://ec.computrabajo.com/ofertas-de-trabajo/") and "#" not in j.url
+    assert "LangChain" in j.description and "3 años" in j.description and "Aws" not in j.description
+
+
+def test_multitrabajos_whole_it_area(monkeypatch):
+    from vigia.sources import ecuador
+    asked = []
+    monkeypatch.setattr(http, "get", lambda *a, **k: asked.append(a[2]) or Resp(b"<html></html>"))
+    def post(source, kind, url, payload, headers=None):
+        asked.append((url, payload["filtros"][0]["value"], headers["x-site-id"]))
+        return {"content": [
+            {"id": 1118461355, "titulo": "Desarrollador Fullstack (Python)", "detalle": "<p>Python y FastAPI</p>",
+             "empresa": "Confidencial", "confidencial": True, "fechaHoraPublicacion": "29-09-2026 16:39:24",
+             "localizacion": "Quito, Pichincha", "modalidadTrabajo": "Presencial"},
+            {"id": 2, "titulo": "QA Pruebas de Rendimiento", "detalle": "k6", "empresa": "Acme", "confidencial": False,
+             "fechaPublicacion": "10-10-2026", "localizacion": "Guayaquil, Guayas", "modalidadTrabajo": "Remoto"}]}
+    monkeypatch.setattr(http, "post_json", post)
+    jobs = ecuador.Multitrabajos({}).fetch()
+    assert asked[0].endswith("tecnologia-sistemas-y-telecomunicaciones.html")      # session cookies first
+    assert asked[1][1:] == ("tecnologia-sistemas-y-telecomunicaciones", "BMEC")
+    a, b = jobs
+    assert (a.company, a.location, a.url) == ("Confidencial (Multitrabajos)", "Quito, Pichincha, Ecuador · presencial",
+                                              "https://www.multitrabajos.com/empleos/1118461355.html")
+    assert a.posted_at.isoformat() == "2026-09-29T16:39:24-05:00" and a.description == "Python y FastAPI"
+    assert (b.location, b.remote) == ("Guayaquil, Guayas, Ecuador (Remote)", True)
+
+
+def test_ecuador_regions(profile):
+    from vigia.flags import region
+    from vigia.models import Job
+    profile = {**profile, "home_country": "Ecuador", "home_cities": ["Quito"]}
+    def at(loc):
+        return region(Job(source="multitrabajos", source_id=loc, title="Desarrollador", company="X", url="u",
+                          location=loc, description="Python"), profile)[0]
+    assert at("Quito, Pichincha, Ecuador · presencial") == "ok"
+    assert at("Quito, Pichincha, Ecuador · hybrid") == "ok"
+    assert at("Guayaquil, Guayas, Ecuador (Remote)") == "ok"
+    assert at("Guayaquil, Guayas, Ecuador · presencial") == "restricted"

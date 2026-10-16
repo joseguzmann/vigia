@@ -234,6 +234,8 @@ def skip_reasons(c: sqlite3.Connection) -> list[tuple[str, int]]:
 
 SOURCE_INFO = {
     "getonbrd": ("Get on Board", "LATAM tech job board", "public API"),
+    "multitrabajos": ("Multitrabajos", "Ecuador's main job board (Bumeran network), whole IT area", "web app API"),
+    "computrabajo": ("Computrabajo Ecuador", "local job board, searched by role", "HTML + JSON-LD"),
     "greenhouse": ("Greenhouse", "company job boards on this applicant-tracking system", "public API"),
     "ashby": ("Ashby", "company job boards on this applicant-tracking system", "public API"),
     "lever": ("Lever", "company job boards on this applicant-tracking system", "public API"),

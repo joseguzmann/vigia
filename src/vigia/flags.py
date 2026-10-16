@@ -161,8 +161,10 @@ def region(job: Job, profile: dict) -> tuple[str, str]:
     text = f"{job.title}\n{job.description}"
 
     office = OFFICE_RE.search(f"{job.title} {job.location}") or LI_OFFICE_RE.search(job.description or "")
-    home_place = next((h for h in [profile.get("home_country"), *profile.get("home_cities", [])]
-                       if h and h.lower() in loc), None)
+    # With home cities set, only those count (on-site in Guayaquil is not on-site in Quito);
+    # without them, the home country does.
+    homes = profile.get("home_cities") or [profile.get("home_country")]
+    home_place = next((h for h in homes if h and h.lower() in loc), None)
     if office:
         # On-site or hybrid where the candidate lives is fine: it is only "office-bound" elsewhere.
         if home_place:

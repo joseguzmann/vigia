@@ -288,7 +288,10 @@ def test_office_where_the_candidate_lives_is_fine(profile):
     profile = {**profile, "home_country": "Ecuador", "home_cities": ["Quito"]}
     quito = Job(source="linkedin", source_id="1", title="Desarrollador Web Senior (PRESENCIAL - QUITO)",
                 company="Construex", url="https://x", location="Quito, Pichincha, Ecuador", description="React.")
-    assert region(quito, profile) == ("ok", "office in Ecuador")
+    assert region(quito, profile) == ("ok", "office in Quito")
+    gye = Job(source="multitrabajos", source_id="3", title="Desarrollador", company="Y", url="https://z",
+              location="Guayaquil, Guayas, Ecuador · presencial", description="React.")
+    assert region(gye, profile)[0] == "restricted"
     lima = Job(source="linkedin", source_id="2", title="Desarrollador Web (Presencial)", company="X",
                url="https://y", location="Lima, Peru", description="React.")
     assert region(lima, profile)[0] == "restricted"
