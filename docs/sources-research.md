@@ -43,3 +43,26 @@ the main account is the candidate's best inbound channel.
 
 Safer equivalent: LinkedIn **job alerts** on the main account (LinkedIn runs the search with
 full filters and emails results) parsed from the mailbox.
+
+## More applicant-tracking systems — 2026-10-15
+
+Probed 909 companies (the remoteintech list outside Europe/Asia/Oceania/Africa, plus ~130
+LATAM consultancies and product companies) against five more ATS, 5,690 requests. Boards
+with at least one live posting: Teamtailor 8 (228 postings), Workable 4 (172), SmartRecruiters
+20 (353), Breezy 10 (136), Recruitee 6 (12). Dropped: companies whose board only hires in Asia
+(Swiggy, Mercari, Turtlemint, Clootrack, Adaface) and slugs that matched an unrelated company
+(`amazon`, `kea`, `embraer` on Breezy).
+
+| ATS | Endpoint | Text |
+|---|---|---|
+| Teamtailor | `https://<slug>.teamtailor.com/jobs.rss` | in the feed, with locations and `remoteStatus` |
+| Workable | `https://apply.workable.com/api/v1/widget/accounts/<slug>?details=true` | in the feed. Cloudflare answers 429 (code 1015) after a burst of requests |
+| SmartRecruiters | `https://api.smartrecruiters.com/v1/companies/<slug>/postings` | per posting, `/postings/<id>` |
+| Breezy | `https://<slug>.breezy.hr/json` | the job page's schema.org JobPosting |
+| Recruitee | `https://<slug>.recruitee.com/api/offers/` | in the feed |
+| RemoteOK | `https://remoteok.com/api` | in the feed (some text arrives as mis-decoded UTF-8) |
+
+**First run (2026-10-16 01:16 UTC):** 513 new postings, 4 passed (all RemoteOK). The company
+boards are mostly European offices (Avenga, Endava), hybrid roles in Buenos Aires or Medellín,
+or old postings left open for years. The run surfaced a rule bug: a location of "Remote job
+(Remote)" or "Remoto" was read as a specific place; fixed, and the re-judge moved 93 stored jobs.

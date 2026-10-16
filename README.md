@@ -62,7 +62,8 @@ verdict, so the person only reads what survives.
 |---|---|---|
 | `getonbrd` | Get on Board, the tech job board most used by LATAM companies | public API |
 | `greenhouse`, `ashby`, `lever` | Career pages of companies you choose to watch | public APIs |
-| `remotive`, `himalayas`, `jobicy` | Remote job boards | public APIs |
+| `teamtailor`, `workable`, `smartrecruiters`, `breezy`, `recruitee` | More company career pages, on other applicant-tracking systems | RSS / public APIs (Breezy: job page) |
+| `remotive`, `himalayas`, `jobicy`, `remoteok` | Remote job boards | public APIs |
 | `hn_whoishiring` | Hacker News monthly "Who is hiring?" thread | Algolia HN API |
 | `workingnomads`, `weworkremotely` | Remote job boards | JSON API / RSS |
 | `strider` | LATAM-only marketplace; each role lists its accepted countries | job pages (schema.org) |
