@@ -46,6 +46,11 @@ NO_VISA_RE = re.compile(r"(?:not|unable to|cannot|can't|don't|do not|will not|wo
                         # helps someone already holding a visa there.
                         r"sponsorship(?: details)?[:*\s]*(?:is\s+)?(?:not available|unavailable|none|no)\b|"
                         r"(?:visa|h-?1b) transfers?", re.I)
+# How a posting states its work mode in the text (used where the source gives no mode field).
+TEXT_MODE_RE = re.compile(
+    r"(?:modalidad|modality|work model|modelo de trabajo|tipo de trabajo|workplace)[^\n]{0,25}?"
+    r"(?:presencial|on-?site|h[ií]brid[oa]|hybrid)|100\s*%\s*presencial|trabajo presencial|"
+    r"(?:position|role|posición|cargo) is (?:fully )?(?:on-?site|hybrid)", re.I)
 # LinkedIn's posting tags, which many ATS copy into the text: an on-site or hybrid role.
 LI_OFFICE_RE = re.compile(r"#LI-(?:Onsite|Hybrid)\b", re.I)
 
@@ -185,6 +190,14 @@ def region(job: Job, profile: dict) -> tuple[str, str]:
             return (("ok", f"{profile['home_country']} is in the accepted countries") if home in listed
                     else ("restricted", f"accepted countries exclude {profile['home_country']}: {countries[:80]}"))
     hit_loc = next((r for r in specific if r in loc), None)
+    # In the home country but not a home city, with the work mode only in the text (LinkedIn
+    # and others send no mode): "Work Modality: On-site · Guayaquil" is not for someone in Quito.
+    cities = [c.lower() for c in profile.get("home_cities") or []]
+    if (hit_loc and home and home in loc and cities and not any(c in loc for c in cities)
+            and not job.remote and "(remote)" not in loc):
+        mode = TEXT_MODE_RE.search(job.description or "")
+        if mode:
+            return "restricted", f"office-bound outside {profile['home_cities'][0]}: {mode.group(0)[:40]}"
     if hit_loc:
         return "ok", f"location: {hit_loc}"
     if "location_restricted" in (job.tags or []):

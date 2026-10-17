@@ -306,3 +306,17 @@ def test_visa_and_relocation_wording(profile):
     assert not offer("**Visa Sponsorship:** Not available")
     assert not offer("SF-based or willing to relocate immediately.")
     assert not offer("Visa Sponsorship Details: Open to visa transfers (e.g. OPT, H1B transfers)")
+
+
+def test_ecuador_outside_home_city_with_mode_only_in_text(profile):
+    from vigia.flags import region
+    from vigia.models import Job
+    profile = {**profile, "home_country": "Ecuador", "home_cities": ["Quito"]}
+    def at(loc, text, remote=None):
+        return region(Job(source="linkedin", source_id=loc + text, title="Full Stack Developer", company="X",
+                          url="u", location=loc, description=text, remote=remote), profile)[0]
+    assert at("Guayaquil, Guayas, Ecuador", "📍 Work Modality: On-site\n📌 Location: Guayaquil") == "restricted"
+    assert at("Guayaquil, Guayas, Ecuador", "Modalidad de trabajo: híbrida") == "restricted"
+    assert at("Guayaquil, Guayas, Ecuador", "Remote (Latin America and South Africa)") == "ok"
+    assert at("Quito, Pichincha, Ecuador", "Work Modality: On-site") == "ok"
+    assert at("Ecuador", "Remote role. Step 4: on-site interview") == "ok"
