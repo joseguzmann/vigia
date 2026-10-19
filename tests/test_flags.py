@@ -305,6 +305,7 @@ def test_visa_and_relocation_wording(profile):
     assert offer("We offer visa sponsorship and a relocation package.")
     assert not offer("**Visa Sponsorship:** Not available")
     assert not offer("SF-based or willing to relocate immediately.")
+    assert not offer("Visa sponsorship details: Not open to any visas (e.g. US citizen, Green Card holders).")
     assert not offer("Visa Sponsorship Details: Open to visa transfers (e.g. OPT, H1B transfers)")
 
 

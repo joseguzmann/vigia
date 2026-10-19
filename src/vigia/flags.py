@@ -45,7 +45,7 @@ NO_VISA_RE = re.compile(r"(?:not|unable to|cannot|can't|don't|do not|will not|wo
                         # "Visa Sponsorship: Not available"; "open to visa transfers (H1B transfers)" only
                         # helps someone already holding a visa there.
                         r"sponsorship(?: details)?[:*\s]*(?:is\s+)?(?:not available|unavailable|none|no)\b|"
-                        r"(?:visa|h-?1b) transfers?", re.I)
+                        r"(?:visa|h-?1b) transfers?|not open to (?:any )?visas?|no visas?\b", re.I)
 # How a posting states its work mode in the text (used where the source gives no mode field).
 TEXT_MODE_RE = re.compile(
     r"(?:modalidad|modality|work model|modelo de trabajo|tipo de trabajo|workplace)[^\n]{0,25}?"
