@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ e.subject }} · Vigía{% endblock %}
+{% block content %}
+<p><a href="{{ back }}">← back to emails</a></p>
+<h1>{{ e.subject or "(no subject)" }}</h1>
+<p class="lead">{{ e.sender }} · {{ (e.received_at or "")[:16]|replace("T", " ") }} ·
+  <span class="act applied">{{ e.kind }}</span> <span class="muted">({{ e.rule or "no rule" }})</span>
+  {% if e.app_number %}· <a href="/applications/{{ e.application_id }}">#{{ e.app_number }} {{ e.app_company }}</a>{% endif %}</p>
+<div class="grid">
+  <section>
+    {% if postings %}
+    <h2>Postings it led to</h2>
+    <ul>{% for u in postings %}<li><a href="{{ u|http }}" target="_blank" rel="noopener noreferrer">{{ u }}</a></li>{% endfor %}</ul>
+    {% endif %}
+    <h2>Text</h2>
+    <div class="description">{{ e.body or "(empty)" }}</div>
+  </section>
+  <aside>
+    <h2>Correct it</h2>
+    <form method="post" action="/emails/{{ e.gmail_id }}" class="action">
+      <input type="hidden" name="next" value="/emails/{{ e.gmail_id }}?back={{ back|urlencode }}">
+      <label>Kind
+        <select name="kind">{% for k in kinds %}<option value="{{ k }}" {% if k == e.kind %}selected{% endif %}>{{ k }}</option>{% endfor %}</select>
+      </label>
+      <label>Application # <input name="number" value="{{ e.app_number or '' }}"></label>
+      <button type="submit">Save</button>
+    </form>
+    <p class="muted">"other" erases everything but the message id.</p>
+    {% if not e.reviewed_at %}
+    <form method="post" action="/emails/{{ e.gmail_id }}" class="action">
+      <input type="hidden" name="next" value="{{ back }}"><input type="hidden" name="reviewed" value="1">
+      <button type="submit">Mark reviewed</button>
+    </form>
+    {% else %}<p class="muted">Reviewed {{ e.reviewed_at[:10] }}</p>{% endif %}
+  </aside>
+</div>
+{% endblock %}

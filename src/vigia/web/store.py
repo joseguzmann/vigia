@@ -30,7 +30,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 from vigia import applications as apps
-from vigia import db
+from vigia import db, mail
 
 ACTIONS = ("skipped", "saved")
 SKIP_REASONS = ("years", "location", "stack", "closed", "level", "other")
@@ -75,6 +75,7 @@ def connect() -> sqlite3.Connection:
             c.executescript(db.SCHEMA)  # idempotent; a fresh install may open the UI first
             c.executescript(SCHEMA)
             c.executescript(apps.SCHEMA)
+            c.executescript(mail.SCHEMA)
             migrate_applied_actions(c)
             _ready.add(str(p))
     return c
@@ -233,6 +234,7 @@ def skip_reasons(c: sqlite3.Connection) -> list[tuple[str, int]]:
 # --- sources -------------------------------------------------------------------
 
 SOURCE_INFO = {
+    "gmail": ("Gmail", "the mailbox: job alerts become postings, replies to applications are kept", "Gmail API, read-only"),
     "getonbrd": ("Get on Board", "LATAM tech job board", "public API"),
     "multitrabajos": ("Multitrabajos", "Ecuador's main job board (Bumeran network), whole IT area", "web app API"),
     "computrabajo": ("Computrabajo Ecuador", "local job board, searched by role", "HTML + JSON-LD"),

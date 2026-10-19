@@ -90,8 +90,9 @@ def conn() -> sqlite3.Connection:
         _conn.execute("PRAGMA journal_mode=WAL")
         _conn.execute("PRAGMA busy_timeout=120000")
         _conn.executescript(SCHEMA)
-        from vigia import applications  # its tables live in the same file
+        from vigia import applications, mail  # their tables live in the same file
         _conn.executescript(applications.SCHEMA)
+        _conn.executescript(mail.SCHEMA)
     return _conn
 
 

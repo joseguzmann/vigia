@@ -19,13 +19,14 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from vigia import applications as apps
-from vigia import db, report
+from vigia import db, mail, report
 from vigia.web import store
 
 mcp = MCPServer("vigia", instructions=(
     "Vigía is a job radar and the source of truth for the job search. Jobs come from many boards "
     "and are judged fit / extra (abroad with visa or relocation) / review / out. Every application "
-    "is recorded here with the CV, experiment variant and status history. Record an application "
+    "is recorded here with the CV, experiment variant and status history, and the mailbox is read for "
+    "job alerts and replies (new_emails). Record an application "
     "as soon as it is sent (call next_application first for its number and variant), and move "
     "its status when an email or the user says something changed."))
 
@@ -188,6 +189,37 @@ def experiment_stats() -> dict:
 def export_applications_markdown() -> str:
     """Every application and its status history as Markdown, for keeping a readable copy."""
     return apps.export_markdown(_c())
+
+
+# --- email -----------------------------------------------------------------------
+
+@tool
+def new_emails(include_alerts: bool = False, limit: int = 60) -> str:
+    """Emails about the job search nobody has gone through yet, oldest first, grouped by kind:
+    application (replies from ATS, assessments, companies applied to; linked to the
+    application when known), recruiter (InMail), review (job-related but unsure).
+    Alerts are left out unless asked: their postings are already in new_jobs.
+    Read them, move application statuses, then call mark_emails_reviewed."""
+    return mail.report(mail.pending(_c(), include_alerts=include_alerts, limit=limit))
+
+
+@tool
+def get_email(gmail_id: str) -> dict:
+    """One kept email with its full text."""
+    return mail.get(gmail_id, _c())
+
+
+@tool
+def mark_emails_reviewed(gmail_ids: list[str] | None = None) -> str:
+    """Mark these emails as gone through (all pending ones when no ids are given)."""
+    return f"{mail.mark_reviewed(gmail_ids, _c())} emails marked as reviewed"
+
+
+@tool
+def set_email_kind(gmail_id: str, kind: str, application_number: int | None = None) -> dict:
+    """Correct an email's classification, or say which application it is about.
+    kind: alert | application | recruiter | review | other ("other" erases all but its id)."""
+    return mail.set_kind(gmail_id, kind, application_number, _c())
 
 
 def main() -> None:

@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 
 from vigia import config, db, flags, http
 from vigia.models import Job
-from vigia.sources.base import Source, job_posting_ld, parse_date, strip_html
+from vigia.sources.base import Source, job_posting_ld, ld_to_job, parse_date
 
 INDEX = "https://torre.ai/sitemap-index.xml"
 MAP_RE = re.compile(r"<loc>(https://torre\.ai/sitemap-(en|es)-(\d+)\.xml)</loc>")
@@ -60,23 +60,4 @@ class Torre(Source):
         return out
 
     def job(self, pid: str, url: str, ld: dict) -> Job:
-        countries = ld.get("_countries") or []
-        remote = ld.get("jobLocationType") == "TELECOMMUTE"
-        places = []
-        for place in ld.get("jobLocation") or []:
-            addr = (place or {}).get("address") or {}
-            bits = [addr.get("addressLocality") or addr.get("streetAddress"), addr.get("addressCountry")]
-            places.append(", ".join(b for b in bits if b))
-        if countries:
-            location = "Remote: " + ", ".join(countries[:6]) + ("…" if len(countries) > 6 else "")
-        else:
-            location = "; ".join(p for p in places if p) or ("Remote" if remote else "")
-        org = ld.get("hiringOrganization") or {}
-        return Job(
-            source=self.name, source_id=pid, title=ld.get("title", ""),
-            company=org.get("name") if isinstance(org, dict) else "", url=url,
-            location=location + (" (Remote)" if remote and "remote" not in location.lower() else ""),
-            remote=remote, posted_at=parse_date(ld.get("datePosted")),
-            description=strip_html(ld.get("description")),
-            tags=[f"countries:{', '.join(countries)}"] if countries else [],
-        )
+        return ld_to_job(self.name, pid, url, ld)

@@ -221,3 +221,14 @@ sources:
       - {keywords: AI Engineer, location: Ecuador}
       - {keywords: LLM Engineer, location: Latin America}
       - {keywords: Python Backend Engineer, location: Ecuador}
+  gmail:
+    # Optional. Reads your mailbox read-only (Gmail API, gmail.readonly) and classifies every
+    # new message: job alerts (their postings go through the filter like any source), replies
+    # to applications, recruiter messages, "review". Anything else is kept as its id only.
+    # The token is created on your own machine (README, "Email") and mounted from ./secrets.
+    enabled: false
+    every_minutes: 15
+    token_file: /app/secrets/gmail-token.json
+    since: "2026-10-12"   # the first run reads from this day
+    max_messages: 300     # per run; the rest waits for the next one
+    max_postings: 40      # posting links opened per run

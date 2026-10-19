@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Emails · Vigía{% endblock %}
+{% block content %}
+<h1>Emails</h1>
+<p class="lead">Every new message in the mailbox is read once. Job alerts become postings (they show up
+  under Jobs), replies are linked to their application, and anything unrelated is kept as its id only
+  ({{ other }} so far).</p>
+<p>Waiting: {% for k in kinds %}<a href="/emails?kind={{ k }}&pending=1">{{ k }} {{ counts.get(k, 0) }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</p>
+<form method="get" class="filters">
+  <label>Kind
+    <select name="kind"><option value="">any</option>
+      {% for k in kinds %}<option value="{{ k }}" {% if k == filters.kind %}selected{% endif %}>{{ k }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="check"><input type="checkbox" name="pending" value="1" {% if filters.pending %}checked{% endif %}> not reviewed</label>
+  <button type="submit">Filter</button>
+</form>
+<table class="jobs">
+  <thead><tr><th>Received</th><th>Kind</th><th>From</th><th>Subject</th><th>Application</th><th></th></tr></thead>
+  <tbody>
+  {% for e in emails %}
+    <tr>
+      <td class="nowrap small">{{ (e.received_at or "")[:16]|replace("T", " ") }}</td>
+      <td><span class="act applied">{{ e.kind }}</span></td>
+      <td class="small">{{ e.sender }}</td>
+      <td class="title"><a href="/emails/{{ e.gmail_id }}?back={{ back|urlencode }}">{{ e.subject or "(no subject)" }}</a>
+        {% if e.kind == "alert" %}<span class="badge">{{ (e.postings|fromjson)|length }} postings</span>{% endif %}</td>
+      <td class="small">{% if e.app_number %}<a href="/applications/{{ e.application_id }}">#{{ e.app_number }} {{ e.app_company }}</a>{% endif %}</td>
+      <td class="small">{% if not e.reviewed_at %}
+        <form method="post" action="/emails/{{ e.gmail_id }}" class="inline">
+          <input type="hidden" name="next" value="{{ back }}"><input type="hidden" name="reviewed" value="1">
+          <button type="submit">Reviewed</button>
+        </form>{% else %}<span class="muted">reviewed</span>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">No emails match.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

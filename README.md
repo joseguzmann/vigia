@@ -153,6 +153,32 @@ but left out of the numbers. Applications younger than 14 days with no reply yet
 
 The rotation is by application number: odd numbers get variant A1, even numbers A2.
 
+## Email
+
+Optional. The `gmail` source reads your mailbox **read-only** every 15 minutes and classifies
+each new message once:
+
+| kind | what | kept |
+|---|---|---|
+| `alert` | a job board's alert (Torre, Indeed, Himalayas, Computrabajo, a company's "new jobs" digest) | the message, and **its postings go through the filter** like any source's |
+| `application` | an ATS, an assessment, or a company you applied to | the message, linked to its application |
+| `recruiter` | a LinkedIn InMail | the message |
+| `review` | job-related words, no rule sure | the message |
+| `other` | everything else | **only the message id**, so it is never read again |
+
+Nothing is sent, labelled, moved or deleted. Pending messages show in the web UI (Emails) and
+through the MCP tools `new_emails`, `get_email`, `mark_emails_reviewed` and `set_email_kind`
+(correct a classification; `other` erases all but the id). Postings whose page is not served
+to a script (Indeed, Himalayas) are kept from the email itself, without text, until another
+source brings the full posting.
+
+**Token.** Create an OAuth client of type *Desktop app* in a Google Cloud project with the Gmail
+API enabled, run the consent flow once on your own machine with the scope
+`https://www.googleapis.com/auth/gmail.readonly`, and save the resulting authorized-user JSON
+(`refresh_token`, `client_id`, `client_secret`, `token_uri`) as `secrets/gmail-token.json` next to
+`docker-compose.yml` (git-ignored, mounted read-only). Publish the consent screen to
+*In production*: while it is in *Testing*, Google expires refresh tokens after 7 days.
+
 ## MCP server
 
 `vigia mcp` speaks the Model Context Protocol on stdin/stdout, so an assistant can read the
@@ -164,7 +190,8 @@ claude mcp add vigia -- ssh your-server docker exec -i vigia vigia mcp
 
 Tools: `health`, `new_jobs`, `mark_reviewed`, `search_jobs`, `get_job`, `skip_job`,
 `next_application`, `record_application`, `set_application_status`, `update_application`,
-`list_applications`, `get_application`, `experiment_stats`, `export_applications_markdown`.
+`list_applications`, `get_application`, `experiment_stats`, `export_applications_markdown`,
+`new_emails`, `get_email`, `mark_emails_reviewed`, `set_email_kind`.
 Calls are run one at a time over a single connection to the same SQLite file the collector
 writes (WAL, busy timeout), and invalid values come back as errors that name the allowed ones.
 

@@ -15,6 +15,8 @@ services:
       # Your personal config (git-ignored). Falls back to the example inside the image.
       - ./config/vigia.yaml:/app/config/vigia.yaml:ro
       - ./config/vocabulary.yaml:/app/config/vocabulary.yaml:ro
+      # Credential files such as the Gmail token (git-ignored). Optional.
+      - ./secrets:/app/secrets:ro
 
   # Private web UI over the same database. Published on localhost only: open it through
   # an SSH tunnel (Docker's published ports bypass the host firewall).

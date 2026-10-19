@@ -86,3 +86,34 @@ def job_posting_ld(html_text: str) -> dict | None:
                 node["_countries"] = [r.get("name") for r in req if isinstance(r, dict) and r.get("name")]
                 return node
     return None
+
+
+def ld_to_job(source: str, source_id: str, url: str, ld: dict) -> Job:
+    """A schema.org JobPosting (from `job_posting_ld`) as a Job. The countries a remote role
+    accepts, when listed, become the location and a `countries:` tag."""
+    countries = ld.get("_countries") or []
+    remote = ld.get("jobLocationType") == "TELECOMMUTE"
+    places = []
+    locs = ld.get("jobLocation") or []
+    for place in locs if isinstance(locs, list) else [locs]:
+        addr = (place or {}).get("address") or {}
+        if isinstance(addr, str):
+            places.append(addr)
+            continue
+        country = addr.get("addressCountry")
+        country = country.get("name") if isinstance(country, dict) else country
+        bits = [addr.get("addressLocality") or addr.get("streetAddress"), country]
+        places.append(", ".join(b for b in bits if b))
+    if countries:
+        location = "Remote: " + ", ".join(countries[:6]) + ("…" if len(countries) > 6 else "")
+    else:
+        location = "; ".join(p for p in places if p) or ("Remote" if remote else "")
+    org = ld.get("hiringOrganization") or {}
+    return Job(
+        source=source, source_id=source_id, title=html.unescape(ld.get("title") or ""),
+        company=html.unescape((org.get("name") if isinstance(org, dict) else str(org)) or ""), url=url,
+        location=location + (" (Remote)" if remote and "remote" not in location.lower() else ""),
+        remote=remote, posted_at=parse_date(ld.get("datePosted")),
+        description=strip_html(ld.get("description")),
+        tags=[f"countries:{', '.join(countries)}"] if countries else [],
+    )

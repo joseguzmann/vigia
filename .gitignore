@@ -13,3 +13,5 @@ data/
 *.db-journal
 reports/
 .DS_Store
+# The Gmail token (and any other credential file).
+secrets/

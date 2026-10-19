@@ -35,6 +35,15 @@
       <label>Note <input name="note"></label>
       <button type="submit">Save</button>
     </form>
+    {% if emails %}
+    <h2>Emails</h2>
+    <ul class="history">
+      {% for m in emails %}
+      <li>{{ (m.received_at or "")[:10] }} · <a href="/emails/{{ m.gmail_id }}">{{ m.subject or "(no subject)" }}</a>
+        <div class="muted">{{ m.sender }}{% if not m.reviewed_at %} · not reviewed{% endif %}</div></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
     <h2>History</h2>
     <ul class="history">
       {% for e in a.events|reverse %}

@@ -19,7 +19,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
 from vigia import applications as apps
-from vigia import db, report
+from vigia import db, mail, report
 from vigia.sources import REGISTRY
 from vigia.web import store
 
@@ -29,6 +29,7 @@ templates.env.filters["local"] = lambda iso: report._local(iso) if iso else ""
 templates.env.filters["pct"] = lambda x: f"{x * 100:.0f}%"
 templates.env.filters["pretty"] = lambda d: json.dumps(d, indent=2, ensure_ascii=False)
 templates.env.globals["verdict_label"] = lambda v: store.VERDICT_LABELS.get(v, v or "")
+templates.env.filters["fromjson"] = lambda s: json.loads(s) if s else []
 templates.env.filters["http"] = lambda u: u if isinstance(u, str) and re.match(r"https?://", u) else ""
 
 _report_lock = threading.Lock()
@@ -129,7 +130,8 @@ def create_app() -> FastAPI:
         except LookupError:
             raise HTTPException(404, "No such application")
         return templates.TemplateResponse(request, "application.html", {
-            "page": "applications", "a": a, "statuses": apps.STATUSES, "back": _back(back, "/applications")})
+            "page": "applications", "a": a, "statuses": apps.STATUSES, "back": _back(back, "/applications"),
+            "emails": mail.listing(c, application_id=app_id)})
 
     @app.post("/applications/{app_id}/status")
     def application_status(app_id: int, c=Depends(get_conn), status: str = Form(...), note: str = Form(""),
@@ -141,6 +143,44 @@ def create_app() -> FastAPI:
         except ValueError as e:
             raise HTTPException(400, str(e))
         return RedirectResponse(_back(next, "/applications"), status_code=303)
+
+    @app.get("/emails")
+    def emails(request: Request, c=Depends(get_conn), kind: str = "", pending: str = ""):
+        kind = kind if kind in mail.KINDS else ""
+        rows = mail.listing(c, kind=kind, unreviewed=bool(pending))
+        counts = {r["kind"]: r["n"] for r in c.execute(
+            "SELECT kind, COUNT(*) n FROM emails WHERE reviewed_at IS NULL AND kind != 'other' GROUP BY kind")}
+        other = c.execute("SELECT COUNT(*) FROM emails WHERE kind = 'other'").fetchone()[0]
+        return templates.TemplateResponse(request, "emails.html", {
+            "page": "emails", "emails": rows, "kinds": mail.KEPT, "counts": counts, "other": other,
+            "filters": {"kind": kind, "pending": pending},
+            "back": "/emails?" + urlencode({"kind": kind, "pending": pending})})
+
+    @app.get("/emails/{gmail_id}")
+    def email(request: Request, gmail_id: str, c=Depends(get_conn), back: str = "/emails"):
+        try:
+            e = mail.get(gmail_id, c)
+        except LookupError:
+            raise HTTPException(404, "No such email")
+        if e["kind"] == "other":
+            raise HTTPException(404, "Not kept: only its id is stored")
+        return templates.TemplateResponse(request, "email.html", {
+            "page": "emails", "e": e, "postings": json.loads(e["postings"] or "[]"),
+            "kinds": mail.KINDS, "back": _back(back, "/emails")})
+
+    @app.post("/emails/{gmail_id}")
+    def email_update(gmail_id: str, c=Depends(get_conn), kind: str = Form(""), number: str = Form(""),
+                     reviewed: str = Form(""), next: str = Form("/emails")):
+        try:
+            if kind:
+                mail.set_kind(gmail_id, kind, int(number) if number.strip() else None, c)
+            if reviewed:
+                mail.mark_reviewed([gmail_id], c)
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return RedirectResponse(_back(next, "/emails"), status_code=303)
 
     @app.get("/experiment")
     def experiment(request: Request, c=Depends(get_conn)):
