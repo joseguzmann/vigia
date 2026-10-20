@@ -213,6 +213,9 @@ sources:
     every_minutes: 45
     hours_old: 48
     max_descriptions: 8
+    # Requests left after the search fetch the text of jobs stored earlier without it
+    # (throttled), newest first, up to this many days back.
+    backlog_days: 14
     pause_seconds: [6, 12]
     # After a 429 every LinkedIn source waits this long (measured: ~3 h).
     cooldown_minutes: 200

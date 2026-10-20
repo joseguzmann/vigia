@@ -201,6 +201,20 @@ def upsert_job(job, verdict: str, score: int, flags: dict) -> bool:
     return False
 
 
+def missing_description(source: str, days: int, limit: int) -> list[sqlite3.Row]:
+    """Jobs of a source stored without their text (the description request was throttled or
+    out of budget), not ruled out, newest first. Jobs someone already applied to or skipped
+    are left alone: their text would change nothing."""
+    c = conn()
+    has_actions = c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='actions'").fetchone()
+    acted = ("AND id NOT IN (SELECT job_id FROM actions) " if has_actions else "") + \
+            "AND id NOT IN (SELECT job_id FROM applications WHERE job_id IS NOT NULL)"
+    return c.execute(
+        f"""SELECT * FROM jobs WHERE source = ? AND (description IS NULL OR description = '')
+            AND verdict != 'out' AND first_seen >= datetime('now', ?) {acted}
+            ORDER BY first_seen DESC LIMIT ?""", (source, f"-{int(days)} days", limit)).fetchall()
+
+
 def known_keys(keys: list[str]) -> set[str]:
     if not keys:
         return set()

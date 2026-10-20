@@ -72,14 +72,40 @@ class LinkedIn(Source):
         worth = [c for c in cards if c.dedupe_key not in known
                  and title_in_scope(c.title, profile)[0]
                  and region(c, profile)[0] != "restricted"]
-        for card in worth[: int(self.cfg.get("max_descriptions", 8))]:
+        budget = int(self.cfg.get("max_descriptions", 8))
+        fetched = 0
+        for card in worth[:budget]:
             try:
                 resp = guest.get("posting", POSTING.format(card.source_id))
             except Blocked:
-                break  # keep the cards we have; descriptions can come on a later run
+                return cards  # keep the cards we have; descriptions can come on a later run
+            fetched += 1
             if resp is not None:
                 card.description = parse_description(resp.text)
-        return cards
+        return cards + self.backlog(guest, budget - fetched)
+
+    def backlog(self, guest: Guest, budget: int) -> list[Job]:
+        """Fetch the text of jobs stored earlier without it. A card is stored even when its
+        description request is throttled; without this it would stay judged on its title
+        forever, because later runs only ask for descriptions of jobs they don't know yet
+        (seen 2026-10-20: a fitting role sat a week in "worth a look" with no text). The job
+        comes back with the same URL, so the store re-judges it on the full text."""
+        out: list[Job] = []
+        if budget <= 0:
+            return out
+        for row in db.missing_description("linkedin", int(self.cfg.get("backlog_days", 14)), budget):
+            try:
+                resp = guest.get("posting", POSTING.format(row["source_id"]))
+            except Blocked:
+                break
+            text = parse_description(resp.text) if resp is not None else ""
+            if text:
+                out.append(Job(source=self.name, source_id=row["source_id"], title=row["title"],
+                               company=row["company"], url=row["url"], location=row["location"] or "",
+                               remote=None if row["remote"] is None else bool(row["remote"]),
+                               posted_at=parse_date(row["posted_at"]), description=text,
+                               salary=row["salary"] or ""))
+        return out
 
 
 def parse_cards(html_text: str) -> list[Job]:
