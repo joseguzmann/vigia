@@ -321,3 +321,9 @@ def test_ecuador_outside_home_city_with_mode_only_in_text(profile):
     assert at("Guayaquil, Guayas, Ecuador", "Remote (Latin America and South Africa)") == "ok"
     assert at("Quito, Pichincha, Ecuador", "Work Modality: On-site") == "ok"
     assert at("Ecuador", "Remote role. Step 4: on-site interview") == "ok"
+
+
+def test_remote_from_latam_is_an_opening():
+    from vigia.flags import OPEN_STRONG_RE
+    assert OPEN_STRONG_RE.search("Remote from LATAM, contracting, advanced English (C1)")
+    assert OPEN_STRONG_RE.search("Trabajo remoto desde Latinoamérica")

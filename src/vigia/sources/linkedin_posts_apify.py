@@ -81,7 +81,10 @@ class LinkedInPostsApify(Source):
             jobs = [j for j in (to_job(i, self.name, q) for i in items) if j]
             self.stats["queries"].append({"query": q, "posts": len(items), "hiring": len(jobs)})
             out += jobs
-        self.stats["spent_after_usd"] = round(self.spent_this_month(headers), 4)
+        try:  # only informative: a slow answer here must not lose the posts already paid for
+            self.stats["spent_after_usd"] = round(self.spent_this_month(headers), 4)
+        except Exception:  # noqa: BLE001
+            self.stats["spent_after_usd"] = None
         self.found = out
         return out
 
@@ -94,9 +97,15 @@ class LinkedInPostsApify(Source):
         return batch
 
     def spent_this_month(self, headers: dict) -> float:
-        resp = http._session.get(f"{API}/users/me/limits", headers=headers, timeout=30)
-        resp.raise_for_status()
-        return float(resp.json()["data"]["current"]["monthlyUsageUsd"])
+        for attempt in (1, 2):  # Apify's API sometimes takes over 30 s to answer
+            try:
+                resp = http._session.get(f"{API}/users/me/limits", headers=headers, timeout=60)
+                resp.raise_for_status()
+                return float(resp.json()["data"]["current"]["monthlyUsageUsd"])
+            except Exception:  # noqa: BLE001
+                if attempt == 2:
+                    raise
+        raise AssertionError("unreachable")
 
     def run(self, headers: dict, url: str, limit: int, max_charge: float) -> list[dict]:
         started = datetime.now(timezone.utc)
