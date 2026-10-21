@@ -247,3 +247,26 @@ def test_torre_from_sitemaps_skips_out_of_scope_slugs(monkeypatch):
     assert not any("ZzZ999" in u or "Old111" in u for u in asked)          # never fetched
     assert (j.source_id, j.company, j.remote) == ("AbC123", "Niuro", True)
     assert j.tags == ["countries:Argentina, Ecuador"] and j.location == "Remote: Argentina, Ecuador"
+
+
+def test_remoteyeah_reads_cards_and_job_pages(monkeypatch):
+    from vigia import http
+    from vigia.sources import remoteyeah
+    listing = ('<a href="https://remoteyeah.com/jobs/remote-ai-engineer-acme" class="job-card-title">AI Engineer</a>'
+               '<a href="https://remoteyeah.com/jobs/remote-sales-manager-acme" class="job-card-title">Sales Manager</a>')
+    job = ('<script type="application/ld+json">{"@type":"JobPosting","title":"AI Engineer",'
+           '"hiringOrganization":{"name":"Acme"},"jobLocationType":"TELECOMMUTE","datePosted":"2026-10-20",'
+           '"description":"<p>Python and LLMs</p>","applicantLocationRequirements":[{"@type":"Country","name":"Ecuador"}]}</script>')
+
+    class Page:
+        def __init__(self, text):
+            self.text = text
+
+    asked = []
+    monkeypatch.setattr(http, "get", lambda src, kind, url, **k: asked.append(kind) or Page(listing if kind == "listing" else job))
+    monkeypatch.setattr(remoteyeah.config, "profile", lambda: {"title_exclude": []})
+    monkeypatch.setattr(remoteyeah, "title_in_scope", lambda t, p: ("Engineer" in t, ""))
+    monkeypatch.setattr(remoteyeah.db, "known_source_ids", lambda s, ids: set())
+    jobs = remoteyeah.RemoteYeah({"listings": ["remote-jobs-in-latin-america"]}).fetch()
+    assert asked == ["listing", "job"]  # the out-of-scope title is never opened
+    assert len(jobs) == 1 and jobs[0].company == "Acme" and "Ecuador" in jobs[0].location

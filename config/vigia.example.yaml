@@ -190,6 +190,18 @@ sources:
   weworkremotely:
     enabled: true
     every_minutes: 360
+  remoteyeah:
+    # Listing pages (25 newest jobs each, server-rendered); only new titles in scope get their
+    # page read (schema.org JobPosting with the accepted countries).
+    enabled: true
+    every_minutes: 360
+    max_details: 40
+    listings:
+      - remote-jobs-in-latin-america
+      - remote-python-jobs
+      - remote-fastapi-jobs
+      - remote-llms-jobs
+      - remote-django-jobs
   linkedin_posts:
     # Hiring posts found through Serper (Google's index), read logged-out.
     # Needs SERPER_API_KEY in .env. Each run spends `queries_per_run` Serper credits.
