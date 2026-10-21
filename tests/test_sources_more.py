@@ -315,3 +315,65 @@ def test_ats_sources_read_discovered_boards(monkeypatch):
     s = Source({"boards": ["acme"]})
     assert s.boards() == ["acme", "found"]
     assert Source({"boards": ["acme"], "include_discovered": False}).boards() == ["acme"]
+
+
+SESSION_TEXT = ("Feed post\n\nAcme Labs\n\n1d\n\nFollow\n\nWe're hiring: AI Engineer\n\nRemote - LATAM. Python and FastAPI.\n\n4\n​\n4 reactions\n"
+                "Feed post\n\nAna Pérez\n\n• 3rd+\n\nRecruiter\n\n2h\n\nFollow\n\nI'm open to work as a backend engineer #OpenToWork\n\n1 reaction\n"
+                "\nAre these results helpful?\n\nYour feedback helps us improve search results")
+
+
+def test_linkedin_session_splits_posts_and_links():
+    from vigia.sources.linkedin_session import post_urls, split_posts
+    posts = split_posts(SESSION_TEXT)
+    assert [p["author"] for p in posts] == ["Acme Labs", "Ana Pérez"]
+    assert posts[0]["text"].startswith("We're hiring: AI Engineer") and "reactions" not in posts[0]["text"]
+    refs = [{"kind": "feed_post", "url": "/posts/acme_hiring-share-7516542601848848385-cgQ5"},
+            {"kind": "feed_post", "url": "/feed/update/urn:li:activity:7518250073844064256/"},
+            {"kind": "person", "url": "/in/ana/"},
+            {"kind": "feed_post", "url": "/posts/ana_open-activity-7517208697547288576-BvQA"}]
+    assert [i for _, i in post_urls(refs)] == ["7516542601848848385", "7517208697547288576"]
+
+
+def test_linkedin_session_keeps_hiring_posts_and_pauses_on_a_check(monkeypatch):
+    import json, pytest
+    from vigia import db
+    from vigia.sources import linkedin_session as ls
+    state = {}
+    monkeypatch.setattr(ls.db, "get_state", lambda k, d=None: state.get(k, d))
+    monkeypatch.setattr(ls.db, "set_state", lambda k, v: state.__setitem__(k, v))
+    monkeypatch.setattr(ls.db, "log_request", lambda *a: None)
+    src = ls.LinkedInSession({"phrases": ["FastAPI"]})
+    result = {"sections": {"search_results": SESSION_TEXT}, "references": {"search_results": []}}
+    monkeypatch.setattr(src, "call", lambda q: _done((json.dumps(result), False)))
+    jobs = src.fetch()
+    assert [j.company for j in jobs] == ["Acme Labs"]
+    monkeypatch.setattr(src, "call", lambda q: _done(("LinkedIn showed a security verification (captcha)", True)))
+    with pytest.raises(RuntimeError, match="paused"):
+        src.fetch()
+    assert state["linkedin_session.paused"]
+    with pytest.raises(RuntimeError, match="paused"):  # stays paused until cleared by hand
+        src.fetch()
+
+
+async def _done(value):
+    return value
+
+
+def test_linkedin_session_paces_like_a_person(monkeypatch):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from vigia.sources import linkedin_session as ls
+    state = {}
+    monkeypatch.setattr(ls.db, "get_state", lambda k, d=None: state.get(k, d))
+    monkeypatch.setattr(ls.db, "set_state", lambda k, v: state.__setitem__(k, v))
+    tz = ZoneInfo("America/Guayaquil")
+    src = ls.LinkedInSession({"per_day": 2, "hours_local": [9, 19], "min_gap_minutes": 90})
+    wed = datetime(2026, 10, 21, 8, 0, tzinfo=tz)
+    slots = src.slots(wed)
+    assert len(slots) == 2 and slots[1] - slots[0] >= ls.timedelta(minutes=90)
+    assert all(9 <= s.hour < 19 for s in slots) and src.slots(wed) == slots  # drawn once a day
+    assert not src.due_at(wed)
+    assert src.due_at(slots[0]) and not src.due_at(slots[0] - ls.timedelta(minutes=1))
+    assert src.slots(datetime(2026, 10, 24, 10, 0, tzinfo=tz)) == []  # Saturday
+    state["linkedin_session.paused"] = "captcha"
+    assert not src.due_at(slots[1])

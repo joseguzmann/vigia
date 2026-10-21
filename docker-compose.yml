@@ -43,5 +43,19 @@ services:
       timeout: 10s
       start_period: 20s
 
+  # Optional: LinkedIn post search with a dedicated, signed-in account (source
+  # linkedin_session). Off unless started with `docker compose --profile linkedin up -d`.
+  # Sign in once with: docker run -it --rm -v $LINKEDIN_SESSION_DIR:/home/pwuser/.linkedin-mcp
+  #   -p 127.0.0.1:6080:6080 stickerdaniel/linkedin-mcp-server:latest --login --login-viewer
+  # Not published: only the vigia container reaches it.
+  linkedin-mcp:
+    image: stickerdaniel/linkedin-mcp-server:latest
+    container_name: linkedin-mcp
+    profiles: [linkedin]
+    restart: unless-stopped
+    command: ["--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8000", "--no-auto-import"]
+    volumes:
+      - ${LINKEDIN_SESSION_DIR:-./linkedin-session}:/home/pwuser/.linkedin-mcp
+
 volumes:
   vigia-data:

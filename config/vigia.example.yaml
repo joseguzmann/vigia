@@ -190,6 +190,23 @@ sources:
   weworkremotely:
     enabled: true
     every_minutes: 360
+  linkedin_session:
+    # LinkedIn's post search with a signed-in account made only for this, through the
+    # linkedin-mcp container (docker compose --profile linkedin). Paced like a person:
+    # weekdays, per_day searches at random local times with min_gap_minutes between them,
+    # one page each. Pauses itself on any login/captcha/verification page.
+    enabled: false
+    every_minutes: 10
+    per_day: 2
+    hours_local: [9, 19]
+    min_gap_minutes: 90
+    timezone: America/Guayaquil
+    date_posted: past-24h
+    max_pages: 1
+    server_url: http://linkedin-mcp:8000/mcp
+    phrases: [FastAPI, Python React, Django]
+    templates:
+      - '"hiring" AND {phrase} AND ("LATAM" OR "Latin America")'
   discover:
     # Finds companies to watch: Google (Serper) searches restricted to ATS job pages, e.g.
     # site:jobs.ashbyhq.com ("Latin America" OR LATAM) ("AI Engineer" OR LLM). Each new board is

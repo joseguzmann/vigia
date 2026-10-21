@@ -80,6 +80,9 @@ def enabled_sources() -> list[str]:
 def due(name: str, now: datetime | None = None) -> bool:
     now = now or datetime.now(timezone.utc)
     cfg = config.source(name)
+    src_cls = REGISTRY.get(name)
+    if src_cls is not None and hasattr(src_cls, "due_at"):  # sources that pace themselves
+        return src_cls(cfg).due_at(now)
     window = cfg.get("hours_utc")  # [start, end): run only inside this UTC hour range
     if window and not (window[0] <= now.hour < window[1]):
         return False
