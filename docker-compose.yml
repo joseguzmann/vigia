@@ -54,6 +54,9 @@ services:
     profiles: [linkedin]
     restart: unless-stopped
     command: ["--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8000", "--no-auto-import"]
+    environment:
+      # The server refuses Host headers other than localhost unless named here.
+      FASTMCP_HTTP_ALLOWED_HOSTS: '["linkedin-mcp", "linkedin-mcp:8000"]'
     volumes:
       - ${LINKEDIN_SESSION_DIR:-./linkedin-session}:/home/pwuser/.linkedin-mcp
 
