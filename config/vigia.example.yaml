@@ -205,6 +205,23 @@ sources:
       - 'site:linkedin.com/posts hiring "{phrase}" LATAM'
       - 'site:linkedin.com/posts hiring "{phrase}" "Latin America" remote'
       - 'site:linkedin.com/posts buscamos "{phrase}" remoto LATAM'
+  linkedin_posts_apify:
+    # LinkedIn's own post search (every post, newest first), run by an Apify actor on the
+    # actor's accounts, never ours. Paid per post (~$0.002): needs APIFY_TOKEN in .env.
+    # Capped per run (max_charge_per_run_usd, enforced by Apify) and per month (the run is
+    # skipped once the account has spent monthly_budget_usd). Runs only inside hours_utc.
+    enabled: false
+    hours_utc: [6, 9]
+    every_minutes: 1200
+    queries_per_run: 1
+    posts_per_query: 25
+    date_posted: past-24h
+    max_charge_per_run_usd: 0.06
+    monthly_budget_usd: 2.0
+    families: [ai, backend, fullstack]
+    templates:
+      - 'hiring "{phrase}" LATAM'
+      - 'hiring "{phrase}" remote'
   linkedin:
     # Optional. Uses LinkedIn's public (logged-out) job search, one query per run,
     # and fetches only the descriptions of jobs that pass the title/location filter.

@@ -76,13 +76,18 @@ def enabled_sources() -> list[str]:
     return [n for n in REGISTRY if config.source(n).get("enabled")]
 
 
-def due(name: str) -> bool:
+def due(name: str, now: datetime | None = None) -> bool:
+    now = now or datetime.now(timezone.utc)
+    cfg = config.source(name)
+    window = cfg.get("hours_utc")  # [start, end): run only inside this UTC hour range
+    if window and not (window[0] <= now.hour < window[1]):
+        return False
     last = db.last_run(name)
     if last is None:
         return True
-    every = int(config.source(name).get("every_minutes", 240))
+    every = int(cfg.get("every_minutes", 240))
     started = datetime.fromisoformat(last["started_at"])
-    return datetime.now(timezone.utc) - started >= timedelta(minutes=every)
+    return now - started >= timedelta(minutes=every)
 
 
 def serve() -> None:

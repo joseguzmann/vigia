@@ -73,6 +73,7 @@ verdict, so the person only reads what survives.
 | `strider` | LATAM-only marketplace; each role lists its accepted countries | job pages (schema.org) |
 | `linkedin` | LinkedIn's logged-out job search (optional, off by default) | public pages, rate-limited |
 | `linkedin_posts` | LinkedIn **hiring posts**, found via Google's index (Serper), read logged-out | Serper API key + public pages |
+| `linkedin_posts_apify` | LinkedIn **hiring posts** from LinkedIn's own post search, run by an Apify actor; capped per run and per month | Apify token (paid per post) |
 
 All LinkedIn traffic goes through one guest client (`linkedin_guest.py`): no login, a per-run
 request budget, and a cooldown shared by every LinkedIn source after a 429. The idea and
@@ -90,6 +91,7 @@ Adding a source is one file: subclass `Source`, return `Job` objects, register i
 ```bash
 cp config/vigia.example.yaml config/vigia.yaml   # then edit your profile
 echo 'SERPER_API_KEY=...' > .env                    # only for linkedin_posts
+echo 'APIFY_TOKEN=...' >> .env                      # only for linkedin_posts_apify
 python -m venv .venv && .venv/bin/pip install -e ".[dev]"
 
 .venv/bin/vigia run          # run every enabled source once

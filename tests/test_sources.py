@@ -111,3 +111,37 @@ def test_ld_json_parsers_stay_fast_on_unclosed_scripts():
     t = time.monotonic()
     assert job_posting_ld(html) is None and parse_post(html) is None
     assert time.monotonic() - t < 1
+
+
+def test_apify_post_to_job():
+    from vigia.sources.linkedin_posts_apify import search_url, to_job
+    item = {"urn": "urn:li:activity:7515061885470179328", "authorName": "Ana",
+            "url": "https://www.linkedin.com/posts/ana_hiring-activity-7515061885470179328-FLl-?utm_source=x",
+            "postedAtISO": "2026-10-11T14:52:56.593Z",
+            "text": "We're hiring: AI Engineer | Remote LATAM\nPython and LangGraph."}
+    job = to_job(item, "linkedin_posts_apify", 'hiring "AI Engineer" LATAM')
+    assert job.source_id == "7515061885470179328" and job.company == "Ana"
+    assert job.title == "We're hiring: AI Engineer | Remote LATAM" and "?" not in job.url
+    assert to_job({**item, "text": "I'm open to work as an AI engineer #OpenToWork"}, "s", "q") is None
+    assert to_job({**item, "text": "Great conference today"}, "s", "q") is None
+    assert "keywords=hiring%20%22AI%20Engineer%22" in search_url('hiring "AI Engineer"')
+
+
+def test_apify_stops_at_the_monthly_budget(monkeypatch):
+    import pytest
+    from vigia.sources.linkedin_posts_apify import LinkedInPostsApify
+    monkeypatch.setenv("APIFY_TOKEN", "t")
+    src = LinkedInPostsApify({"monthly_budget_usd": 2.0})
+    monkeypatch.setattr(src, "spent_this_month", lambda h: 2.0)
+    monkeypatch.setattr(src, "run", lambda *a: pytest.fail("must not run over budget"))
+    with pytest.raises(RuntimeError, match="budget"):
+        src.fetch()
+
+
+def test_source_runs_only_inside_its_utc_hours(monkeypatch):
+    from datetime import datetime, timezone
+    from vigia import config, pipeline
+    monkeypatch.setattr(config, "source", lambda n: {"hours_utc": [6, 9], "every_minutes": 1200})
+    monkeypatch.setattr(pipeline.db, "last_run", lambda n: None)
+    assert not pipeline.due("x", datetime(2026, 10, 21, 4, tzinfo=timezone.utc))
+    assert pipeline.due("x", datetime(2026, 10, 21, 7, tzinfo=timezone.utc))

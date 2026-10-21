@@ -259,6 +259,7 @@ SOURCE_INFO = {
     "weworkremotely": ("We Work Remotely", "remote job board", "RSS"),
     "linkedin": ("LinkedIn jobs", "logged-out job search, slow and rotating", "public pages"),
     "linkedin_posts": ("LinkedIn hiring posts", "posts found through Serper (Google's index)", "Serper API + public pages"),
+    "linkedin_posts_apify": ("LinkedIn hiring posts (search)", "LinkedIn's own post search, run by an Apify actor", "Apify API (paid per post)"),
 }
 
 
