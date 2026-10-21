@@ -327,3 +327,16 @@ def test_remote_from_latam_is_an_opening():
     from vigia.flags import OPEN_STRONG_RE
     assert OPEN_STRONG_RE.search("Remote from LATAM, contracting, advanced English (C1)")
     assert OPEN_STRONG_RE.search("Trabajo remoto desde Latinoamérica")
+
+
+def test_region_names_in_a_country_list_include_ecuador(profile):
+    from datetime import datetime, timezone
+    from vigia.flags import evaluate
+    from vigia.models import Job
+    for countries in ("Worldwide", "Anywhere", "Europe, North America, Latin America, Argentina, Brazil"):
+        j = Job(source="remoteyeah", source_id="1", title="AI Engineer", company="Acme", url="https://x",
+                description="Python and LLMs.", posted_at=datetime.now(timezone.utc), remote=True,
+                tags=[f"countries:{countries}"])
+        assert evaluate(j, profile)[2]["region"] == "ok", countries
+    j.tags = ["countries:Belize, El Salvador, Honduras"]
+    assert evaluate(j, profile)[2]["region"] == "restricted"

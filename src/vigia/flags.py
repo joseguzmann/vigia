@@ -147,6 +147,9 @@ OPEN_STRONG_RE = re.compile(
 ANYWHERE_RE = re.compile(
     r"work\s+from\s+anywhere(?!\s+(?:within|in)\b)|anywhere\s+in\s+the\s+world|remote[ ,(-]*worldwide"
     r"|open\s+to\s+(?:candidates|applicants)\s+(?:from\s+)?(?:anywhere|worldwide)", re.I)
+# Region names in an accepted-countries list that include Ecuador.
+OPEN_REGIONS = {"worldwide", "anywhere", "global", "latin america", "latam", "south america", "the americas",
+                "americas", "latinoamérica", "latinoamerica", "américa latina"}
 LATAM_RE = re.compile(r"\b" + LATAM + r"\b", re.I)
 OFFICE_RE = re.compile(r"\bhybrid\b|\bh[ií]brido\b|\bon-?site\b|\bin-office\b|\bpresencial\b", re.I)
 GENERIC_REMOTE = {"", "remote", "remote job", "anywhere", "worldwide", "global", "fully remote",
@@ -187,6 +190,10 @@ def region(job: Job, profile: dict) -> tuple[str, str]:
     home = (profile.get("home_country") or "").lower()
     if countries is not None and home:
         listed = [c.strip().lower() for c in countries.split(",") if c.strip()]
+        # Some boards (RemoteYeah) put regions in the list: "Worldwide", "Latin America".
+        broad = next((c for c in listed if c in OPEN_REGIONS), None)
+        if broad:
+            return "ok", f"accepted region includes {profile['home_country']}: {broad}"
         if listed:
             return (("ok", f"{profile['home_country']} is in the accepted countries") if home in listed
                     else ("restricted", f"accepted countries exclude {profile['home_country']}: {countries[:80]}"))
