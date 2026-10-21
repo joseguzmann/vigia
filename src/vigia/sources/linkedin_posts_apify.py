@@ -5,7 +5,8 @@ content search sees every post, sorted by date, but needs a logged-in session. U
 account for that risks a restriction, so this source rents the search from an Apify actor
 that runs on the actor's accounts: we send a search URL, it returns the posts as JSON.
 
-It is paid per post, so it is kept small and capped twice:
+It runs by hand (MCP `search_linkedin_posts`, with the searches chosen each time) or on the
+schedule if enabled. It is paid per post, so it is kept small and capped twice:
   - each run passes `maxTotalChargeUsd`, which Apify enforces on the actor;
   - before running, the account's spend this month is read from Apify, and the run is
     skipped once it reaches `monthly_budget_usd`.
@@ -68,22 +69,29 @@ class LinkedInPostsApify(Source):
         if spent >= budget:
             raise RuntimeError(f"monthly budget reached: ${spent:.2f} of ${budget:.2f}")
 
-        all_q = self.queries()
-        n = int(self.cfg.get("queries_per_run", 1))
-        start = int(db.get_state(f"{self.name}.cursor", "0")) % len(all_q)
-        batch = [all_q[(start + i) % len(all_q)] for i in range(min(n, len(all_q)))]
-        db.set_state(f"{self.name}.cursor", str(start + len(batch)))
+        batch = self.cfg.get("queries") or self.next_queries()
 
         per_query = int(self.cfg.get("posts_per_query", 25))
         max_charge = min(float(self.cfg.get("max_charge_per_run_usd", 0.06)), budget - spent)
         date_posted = self.cfg.get("date_posted", "past-24h")
         out = []
+        self.stats = {"spent_before_usd": round(spent, 4), "queries": []}
         for q in batch:
-            for item in self.run(headers, search_url(q, date_posted), per_query, max_charge / len(batch)):
-                job = to_job(item, self.name, q)
-                if job:
-                    out.append(job)
+            items = self.run(headers, search_url(q, date_posted), per_query, max_charge / len(batch))
+            jobs = [j for j in (to_job(i, self.name, q) for i in items) if j]
+            self.stats["queries"].append({"query": q, "posts": len(items), "hiring": len(jobs)})
+            out += jobs
+        self.stats["spent_after_usd"] = round(self.spent_this_month(headers), 4)
+        self.found = out
         return out
+
+    def next_queries(self) -> list[str]:
+        all_q = self.queries()
+        n = int(self.cfg.get("queries_per_run", 1))
+        start = int(db.get_state(f"{self.name}.cursor", "0")) % len(all_q)
+        batch = [all_q[(start + i) % len(all_q)] for i in range(min(n, len(all_q)))]
+        db.set_state(f"{self.name}.cursor", str(start + len(batch)))
+        return batch
 
     def spent_this_month(self, headers: dict) -> float:
         resp = http._session.get(f"{API}/users/me/limits", headers=headers, timeout=30)

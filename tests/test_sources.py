@@ -145,3 +145,15 @@ def test_source_runs_only_inside_its_utc_hours(monkeypatch):
     monkeypatch.setattr(pipeline.db, "last_run", lambda n: None)
     assert not pipeline.due("x", datetime(2026, 10, 21, 4, tzinfo=timezone.utc))
     assert pipeline.due("x", datetime(2026, 10, 21, 7, tzinfo=timezone.utc))
+
+
+def test_apify_manual_queries_do_not_move_the_rotation(monkeypatch):
+    from vigia.sources.linkedin_posts_apify import LinkedInPostsApify
+    monkeypatch.setenv("APIFY_TOKEN", "t")
+    src = LinkedInPostsApify({"queries": ['hiring "AI Engineer" LATAM'], "posts_per_query": 5})
+    monkeypatch.setattr(src, "spent_this_month", lambda h: 0.1)
+    monkeypatch.setattr(src, "next_queries", lambda: (_ for _ in ()).throw(AssertionError("rotated")))
+    seen = []
+    monkeypatch.setattr(src, "run", lambda h, url, limit, charge: seen.append((url, limit, charge)) or [])
+    assert src.fetch() == [] and len(seen) == 1 and seen[0][1] == 5
+    assert src.stats["queries"] == [{"query": 'hiring "AI Engineer" LATAM', "posts": 0, "hiring": 0}]

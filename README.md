@@ -73,7 +73,7 @@ verdict, so the person only reads what survives.
 | `strider` | LATAM-only marketplace; each role lists its accepted countries | job pages (schema.org) |
 | `linkedin` | LinkedIn's logged-out job search (optional, off by default) | public pages, rate-limited |
 | `linkedin_posts` | LinkedIn **hiring posts**, found via Google's index (Serper), read logged-out | Serper API key + public pages |
-| `linkedin_posts_apify` | LinkedIn **hiring posts** from LinkedIn's own post search, run by an Apify actor; capped per run and per month | Apify token (paid per post) |
+| `linkedin_posts_apify` | LinkedIn **hiring posts** from LinkedIn's own post search, run by an Apify actor; launched by hand (MCP `search_linkedin_posts`), capped per run and per month | Apify token (paid per post) |
 
 All LinkedIn traffic goes through one guest client (`linkedin_guest.py`): no login, a per-run
 request budget, and a cooldown shared by every LinkedIn source after a 429. The idea and

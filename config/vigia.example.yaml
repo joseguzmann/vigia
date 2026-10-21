@@ -209,9 +209,10 @@ sources:
     # LinkedIn's own post search (every post, newest first), run by an Apify actor on the
     # actor's accounts, never ours. Paid per post (~$0.002): needs APIFY_TOKEN in .env.
     # Capped per run (max_charge_per_run_usd, enforced by Apify) and per month (the run is
-    # skipped once the account has spent monthly_budget_usd). Runs only inside hours_utc.
+    # skipped once the account has spent monthly_budget_usd).
+    # Run by hand: MCP search_linkedin_posts (searches chosen each time). If enabled, it also
+    # runs on the schedule (hours_utc limits it to a UTC hour range), rotating the templates.
     enabled: false
-    hours_utc: [6, 9]
     every_minutes: 1200
     queries_per_run: 1
     posts_per_query: 25

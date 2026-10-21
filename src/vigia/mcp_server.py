@@ -10,6 +10,7 @@ Nothing listens on a port. Logs go to stderr; stdout carries the protocol only.
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import sys
 import threading
@@ -118,6 +119,38 @@ def skip_job(job_id: int, reason: str, note: str = "") -> str:
     reason: years | location | stack | closed | level | other."""
     store.record_action(_c(), job_id, "skipped", reason, note)
     return f"job {job_id} skipped ({reason})"
+
+
+@tool
+def search_linkedin_posts(queries: list[str], posts_per_query: int = 25, date_posted: str = "past-24h") -> dict:
+    """Run LinkedIn's own post search through the Apify actor (paid, ~$0.002 per post) and store
+    the hiring posts as jobs. queries: LinkedIn search keywords, e.g. 'hiring "AI Engineer" LATAM'.
+    date_posted: past-24h | past-week | past-month. Returns posts per query, the jobs kept with
+    their verdict, which ones Google's index (linkedin_posts) had already found, and the spend."""
+    from vigia import config, pipeline
+    from vigia.sources.linkedin_posts_apify import LinkedInPostsApify
+    if not queries or not 1 <= posts_per_query <= 50:
+        raise ValueError("give 1+ queries and 1-50 posts per query")
+    if date_posted not in ("past-24h", "past-week", "past-month"):
+        raise ValueError("date_posted: past-24h | past-week | past-month")
+    c = _c()
+    cfg = dict(config.source("linkedin_posts_apify"))
+    cfg.update(queries=queries, posts_per_query=posts_per_query, date_posted=date_posted,
+               max_charge_per_run_usd=round(len(queries) * posts_per_query * 0.0025 + 0.01, 3))
+    src = LinkedInPostsApify(cfg)
+    started = db.now()
+    summary = pipeline.run_source(src.name, src)
+    found = []
+    for job in getattr(src, "found", []):
+        r = c.execute("SELECT id, verdict, first_seen, seen_in FROM jobs WHERE dedupe_key = ?",
+                      (job.dedupe_key,)).fetchone()
+        if r is None:
+            continue
+        seen = {s["source"] for s in json.loads(r["seen_in"] or "[]")}
+        found.append({"id": r["id"], "verdict": r["verdict"], "author": job.company,
+                      "title": job.title[:120], "new": r["first_seen"] >= started,
+                      "also_in_google": "linkedin_posts" in seen})
+    return summary | getattr(src, "stats", {}) | {"posts": found}
 
 
 # --- applications ----------------------------------------------------------------

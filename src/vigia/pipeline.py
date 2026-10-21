@@ -16,14 +16,15 @@ log = logging.getLogger("vigia")
 TICK_SECONDS = 60
 
 
-def run_source(name: str) -> dict:
-    """Fetch one source, flag every job, store it. Returns a small summary."""
+def run_source(name: str, src=None) -> dict:
+    """Fetch one source, flag every job, store it. Returns a small summary.
+    `src` is a source already built with its own settings (a manual run); default: the config's."""
     cfg = config.source(name)
     run_id = db.start_run(name)
     fetched = new = 0
     error = None
     try:
-        jobs = REGISTRY[name](cfg).fetch()
+        jobs = (src or REGISTRY[name](cfg)).fetch()
         fetched = len(jobs)
         profile = config.profile()
         for job in jobs:
