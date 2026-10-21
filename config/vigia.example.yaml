@@ -199,7 +199,7 @@ sources:
     every_minutes: 5040
     queries_per_run: 15
     max_new_per_run: 40
-    freshness: qdr:w
+    freshness: qdr:m  # companies, not fresh postings: a month finds more boards
     ats: [ashby, greenhouse, lever, workable, teamtailor]
     regions:
       - '("Latin America" OR LATAM)'
