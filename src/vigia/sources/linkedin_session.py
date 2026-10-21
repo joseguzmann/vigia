@@ -34,6 +34,7 @@ CHECKPOINT_RE = re.compile(
     r"checkpoint|captcha|unusual activity|verify (?:it'?s|that it'?s) you|security verification|"
     r"sign in to continue|session (?:has )?expired|not (?:signed|logged) in|authentication (?:required|in progress)|"
     r"--login|restricted", re.I)
+AGE_RE = re.compile(r"\d+\s?(?:s|m|h|d|w|mo|y)(?:\s*•.*)?|Edited.*", re.I)
 POST_URL_RE = re.compile(r"/posts/[^\s\"]*?(?:activity|share)-(\d{17,20})")
 
 
@@ -45,8 +46,13 @@ def split_posts(text: str) -> list[dict]:
         lines = [ln for ln in lines if ln]
         if not lines:
             continue
-        author = lines[0]
-        body = lines[lines.index("Follow") + 1:] if "Follow" in lines else lines[1:]
+        # Header: author (or a group, then the author with "• 2nd"), headline, age, "Follow".
+        # Without a Follow button (a connection, a group post) the body starts after the age.
+        head_end = lines.index("Follow") if "Follow" in lines else next(
+            (i for i, ln in enumerate(lines[:8]) if AGE_RE.fullmatch(ln)), 0)
+        degree = next((ln for ln in lines[:head_end] if "•" in ln), None)
+        author = re.sub(r"\s*•.*$", "", degree).strip() if degree and not degree.startswith("•") else lines[0]
+        body = lines[head_end + 1:] if head_end else lines[1:]
         # The tail is reaction counts and boilerplate.
         while body and (re.fullmatch(r"[\d\s​]*(reactions?|comments?|reposts?)?", body[-1], re.I)
                         or body[-1].startswith("Are these results") or body[-1].startswith("Your feedback")):

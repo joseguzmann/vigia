@@ -377,3 +377,11 @@ def test_linkedin_session_paces_like_a_person(monkeypatch):
     assert src.slots(datetime(2026, 10, 24, 10, 0, tzinfo=tz)) == []  # Saturday
     state["linkedin_session.paused"] = "captcha"
     assert not src.due_at(slots[1])
+
+
+def test_linkedin_session_reads_group_posts_without_follow():
+    from vigia.sources.linkedin_session import split_posts
+    text = ("Feed post\n\nAI Tools & Productivity\n\nMichelle Landa • 3rd+\n\nRecruiter at Niuro\n\n5h\n\n"
+            "#WeAreHiring Senior AI Engineer, remote LATAM\n\n3 reactions\n")
+    [p] = split_posts(text)
+    assert p["author"] == "Michelle Landa" and p["text"].startswith("#WeAreHiring")
