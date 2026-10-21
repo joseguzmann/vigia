@@ -190,6 +190,24 @@ sources:
   weworkremotely:
     enabled: true
     every_minutes: 360
+  discover:
+    # Finds companies to watch: Google (Serper) searches restricted to ATS job pages, e.g.
+    # site:jobs.ashbyhq.com ("Latin America" OR LATAM) ("AI Engineer" OR LLM). Each new board is
+    # read once; if a job passes the filters, the board is watched from then on (table
+    # discovered_boards). queries_per_run Serper credits per run; the searches rotate.
+    enabled: false
+    every_minutes: 5040
+    queries_per_run: 15
+    max_new_per_run: 40
+    freshness: qdr:w
+    ats: [ashby, greenhouse, lever, workable, teamtailor]
+    regions:
+      - '("Latin America" OR LATAM)'
+      - '(remote Ecuador OR "South America")'
+    roles:
+      - '("AI Engineer" OR "LLM Engineer" OR "Applied AI")'
+      - '(Python OR FastAPI OR Django) (Backend OR "Software Engineer")'
+      - '("Full Stack" OR Fullstack) (Python OR TypeScript)'
   remoteyeah:
     # Listing pages (25 newest jobs each, server-rendered); only new titles in scope get their
     # page read (schema.org JobPosting with the accepted countries).

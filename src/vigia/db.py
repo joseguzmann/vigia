@@ -64,6 +64,19 @@ CREATE TABLE IF NOT EXISTS state (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- Company boards found by the `discover` source. 'watching' boards are read by their ATS
+-- source like the ones in the config; 'rejected' ones had nothing in scope when checked.
+CREATE TABLE IF NOT EXISTS discovered_boards (
+    ats        TEXT NOT NULL,
+    slug       TEXT NOT NULL,
+    status     TEXT NOT NULL,
+    found_at   TEXT NOT NULL,
+    query      TEXT,
+    example    TEXT,
+    in_scope   INTEGER,
+    PRIMARY KEY (ats, slug)
+);
 """
 
 _conn: sqlite3.Connection | None = None
@@ -221,6 +234,17 @@ def known_keys(keys: list[str]) -> set[str]:
     marks = ",".join("?" * len(keys))
     rows = conn().execute(f"SELECT dedupe_key FROM jobs WHERE dedupe_key IN ({marks})", keys)
     return {r["dedupe_key"] for r in rows}
+
+
+def discovered_slugs(ats: str, status: str | None = "watching") -> list[str]:
+    q = "SELECT slug FROM discovered_boards WHERE ats = ?" + (" AND status = ?" if status else "")
+    return [r["slug"] for r in conn().execute(q, (ats, status) if status else (ats,))]
+
+
+def add_discovered(ats: str, slug: str, status: str, query: str, example: str, in_scope: int) -> None:
+    conn().execute("INSERT OR REPLACE INTO discovered_boards VALUES (?, ?, ?, ?, ?, ?, ?)",
+                   (ats, slug, status, now(), query, example, in_scope))
+    conn().commit()
 
 
 def known_source_ids(source: str, ids: list[str]) -> set[str]:

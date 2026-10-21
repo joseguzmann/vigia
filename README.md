@@ -72,6 +72,7 @@ verdict, so the person only reads what survives.
 | `torre` | Torre: postings from its public sitemaps and pages, with the countries each accepts (its API is off-limits in robots.txt) | sitemaps + JSON-LD |
 | `strider` | LATAM-only marketplace; each role lists its accepted countries | job pages (schema.org) |
 | `linkedin` | LinkedIn's logged-out job search (optional, off by default) | public pages, rate-limited |
+| `discover` | Finds companies to watch: Google searches on ATS job pages (Ashby, Greenhouse, Lever, Workable, Teamtailor); boards with jobs in scope are added to their ATS source | Serper API key |
 | `remoteyeah` | RemoteYeah listing pages (Latin America, Python, FastAPI, LLMs, Django), job pages read for their JSON-LD | public pages |
 | `linkedin_posts` | LinkedIn **hiring posts**, found via Google's index (Serper), read logged-out | Serper API key + public pages |
 | `linkedin_posts_apify` | LinkedIn **hiring posts** from LinkedIn's own post search, run by an Apify actor; launched by hand (MCP `search_linkedin_posts`), capped per run and per month | Apify token (paid per post) |

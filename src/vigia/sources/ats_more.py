@@ -34,7 +34,7 @@ class _Boards(Source):
 
     def fetch(self) -> list[Job]:
         out: list[Job] = []
-        for slug in self.cfg.get("boards", []):
+        for slug in self.boards():
             try:
                 out += self.board(slug)
             except Throttled:

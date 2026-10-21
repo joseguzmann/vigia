@@ -21,7 +21,7 @@ class Greenhouse(Source):
 
     def fetch(self) -> list[Job]:
         out = []
-        for slug in self.cfg.get("boards", []):
+        for slug in self.boards():
             data = http.get_json(self.name, slug,
                                  f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs",
                                  params={"content": "true"})
@@ -41,7 +41,7 @@ class Ashby(Source):
 
     def fetch(self) -> list[Job]:
         out = []
-        for slug in self.cfg.get("boards", []):
+        for slug in self.boards():
             data = http.get_json(self.name, slug,
                                  f"https://api.ashbyhq.com/posting-api/job-board/{slug}",
                                  params={"includeCompensation": "true"})
@@ -64,7 +64,7 @@ class Lever(Source):
 
     def fetch(self) -> list[Job]:
         out = []
-        for slug in self.cfg.get("boards", []):
+        for slug in self.boards():
             data = http.get_json(self.name, slug, f"https://api.lever.co/v0/postings/{slug}",
                                  params={"mode": "json"})
             for j in data or []:

@@ -23,6 +23,12 @@ class Source:
     def fetch(self) -> list[Job]:
         raise NotImplementedError
 
+    def boards(self) -> list[str]:
+        """Company boards for an ATS source: the config's, plus the ones `discover` found."""
+        from vigia import db
+        found = db.discovered_slugs(self.name) if self.cfg.get("include_discovered", True) else []
+        return list(dict.fromkeys([*self.cfg.get("boards", []), *found]))
+
 
 def strip_html(text: str | None) -> str:
     """HTML to readable plain text, keeping paragraph breaks."""

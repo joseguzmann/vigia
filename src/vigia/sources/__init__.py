@@ -3,6 +3,7 @@
 from vigia.sources.ats import Ashby, Greenhouse, Lever
 from vigia.sources.ats_more import Breezy, Recruitee, SmartRecruiters, Teamtailor, Workable
 from vigia.sources.boards import Himalayas, Jobicy, RemoteOK, Remotive, WeWorkRemotely, WorkingNomads
+from vigia.sources.discover import Discover
 from vigia.sources.ecuador import Computrabajo, Multitrabajos
 from vigia.sources.getonbrd import GetOnBoard
 from vigia.sources.gmail import Gmail
@@ -19,4 +20,4 @@ from vigia.sources.workday import Workday
 REGISTRY = {cls.name: cls for cls in
             (GetOnBoard, Torre, Multitrabajos, Computrabajo, Indeed, Greenhouse, Ashby, Lever, Workday, Teamtailor, Workable, SmartRecruiters, Breezy,
              Recruitee, Remotive, Himalayas, Jobicy, RemoteOK, HNWhoIsHiring, Strider, WorkingNomads,
-             WeWorkRemotely, RemoteYeah, LinkedIn, LinkedInPosts, LinkedInPostsApify, Gmail)}
+             WeWorkRemotely, RemoteYeah, LinkedIn, LinkedInPosts, LinkedInPostsApify, Gmail, Discover)}

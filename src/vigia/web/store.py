@@ -258,6 +258,7 @@ SOURCE_INFO = {
     "workingnomads": ("Working Nomads", "remote job board", "public API"),
     "weworkremotely": ("We Work Remotely", "remote job board", "RSS"),
     "linkedin": ("LinkedIn jobs", "logged-out job search, slow and rotating", "public pages"),
+    "discover": ("Company discovery", "Google searches on ATS job pages; new boards with jobs in scope get watched", "Serper API"),
     "remoteyeah": ("RemoteYeah", "remote developer jobs, many open to Latin America", "listing pages + JSON-LD"),
     "linkedin_posts": ("LinkedIn hiring posts", "posts found through Serper (Google's index)", "Serper API + public pages"),
     "linkedin_posts_apify": ("LinkedIn hiring posts (search)", "LinkedIn's own post search, run by an Apify actor", "Apify API (paid per post)"),

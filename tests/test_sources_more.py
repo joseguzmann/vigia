@@ -270,3 +270,48 @@ def test_remoteyeah_reads_cards_and_job_pages(monkeypatch):
     jobs = remoteyeah.RemoteYeah({"listings": ["remote-jobs-in-latin-america"]}).fetch()
     assert asked == ["listing", "job"]  # the out-of-scope title is never opened
     assert len(jobs) == 1 and jobs[0].company == "Acme" and "Ecuador" in jobs[0].location
+
+
+def test_discover_takes_slugs_from_ats_urls():
+    from vigia.sources.discover import slug_from
+    assert slug_from("ashby", "https://jobs.ashbyhq.com/Acme/aa81-42") == "acme"
+    assert slug_from("greenhouse", "https://job-boards.greenhouse.io/acme/jobs/123") == "acme"
+    assert slug_from("greenhouse", "https://boards.greenhouse.io/embed/job_app?for=x") is None
+    assert slug_from("lever", "https://jobs.lever.co/acme/e051") == "acme"
+    assert slug_from("workable", "https://apply.workable.com/acme/j/ABC/") == "acme"
+    assert slug_from("teamtailor", "https://acme.na.teamtailor.com/jobs/1-ai-engineer") == "acme.na"
+
+
+def test_discover_watches_only_boards_with_jobs_in_scope(monkeypatch):
+    from vigia import db, flags
+    from vigia.models import Job
+    from vigia.sources import discover
+    monkeypatch.setenv("SERPER_API_KEY", "k")
+    src = discover.Discover({"ats": ["ashby"], "queries_per_run": 1})
+    monkeypatch.setattr(src, "search", lambda key, q: [
+        {"link": "https://jobs.ashbyhq.com/good/1", "title": "AI Engineer"},
+        {"link": "https://jobs.ashbyhq.com/bad/2", "title": "Sales"},
+        {"link": "https://jobs.ashbyhq.com/known/3", "title": "AI Engineer"}])
+    monkeypatch.setattr(discover.config, "source", lambda n: {"boards": ["known"]})
+    monkeypatch.setattr(discover.config, "profile", lambda: {})
+    job = lambda slug: Job(source="ashby", source_id=slug, title=slug, company=slug, url="https://x")
+    read = []
+    monkeypatch.setattr(src, "read_board", lambda ats, slug: read.append(slug) or [job(slug)])
+    monkeypatch.setattr(discover.flags, "evaluate", lambda j, p: ("fit" if j.title == "good" else "out", 0, {}))
+    added = []
+    monkeypatch.setattr(discover.db, "add_discovered", lambda *a: added.append((a[1], a[2])))
+    monkeypatch.setattr(discover.db, "discovered_slugs", lambda ats, status="watching": [])
+    monkeypatch.setattr(discover.db, "get_state", lambda k, d=None: "0")
+    monkeypatch.setattr(discover.db, "set_state", lambda k, v: None)
+    jobs = src.fetch()
+    assert read == ["good", "bad"]  # the board already in the config is not read again
+    assert added == [("good", "watching"), ("bad", "rejected")] and [j.title for j in jobs] == ["good"]
+
+
+def test_ats_sources_read_discovered_boards(monkeypatch):
+    from vigia import db
+    from vigia.sources.base import Source
+    monkeypatch.setattr(db, "discovered_slugs", lambda ats, status="watching": ["found", "acme"])
+    s = Source({"boards": ["acme"]})
+    assert s.boards() == ["acme", "found"]
+    assert Source({"boards": ["acme"], "include_discovered": False}).boards() == ["acme"]
