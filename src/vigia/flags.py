@@ -32,11 +32,11 @@ YEARS_RE = re.compile(
 # Company-history phrases that are not requirements: "for over 25 years", "founded 15 years ago".
 YEARS_NOISE_RE = re.compile(r"(over|for|since|founded|history|ago|in business|leading the way)\s*$", re.I)
 
-# Roles abroad that bring the candidate there: these become "extra" instead of "out".
+# Roles abroad that sponsor a visa: these become "extra" instead of "out". A relocation package
+# alone is not enough (it is often only for people already allowed to work there).
 VISA_RE = re.compile(
     r"visa sponsorship|sponsor(?:ship)? (?:is )?(?:available|provided|offered)|we (?:can |will )?sponsor|"
-    r"relocation (?:support|assistance|package|bonus)|relocation (?:is )?(?:available|provided|offered)|"
-    r"we (?:will |can )?relocate you|patrocinio de visa|reubicaci[oó]n", re.I)
+    r"we sponsor (?:visas?|h-?1b|o-?1)|patrocinio de visa|visa sponsor", re.I)
 # Not offers: "willing to relocate" / "relocate to SF" ask the candidate to move on their own.
 NO_VISA_RE = re.compile(r"(?:not|unable to|cannot|can't|don't|do not|will not|won't) (?:provide |offer )?(?:visa )?sponsor|"
                         r"no (?:visa )?sponsorship|sponsorship is not|without (?:the need for )?sponsorship|"
@@ -61,6 +61,9 @@ RESTRICTION_RE = re.compile(
     r"|work\s+authori[sz]ation|authori[sz]ed\s+to\s+work\s+in"
     r"|remote(?:ly)?\s+(?:with)?in\s+the\s+(?:us|u\.s\.|united states|uk)\b"
     r"|(?:only|exclusively)\s+(?:open\s+to\s+)?candidates\s+(?:based|located|residing)"
+    # Spanish: "candidatos que residan en República Dominicana", "debe residir en Colombia"
+    r"|\b(?:residan|resida|vivan|residentes|radicad[oa]s?|ubicad[oa]s?)\s+en\b"
+    r"|\bdeb(?:e|en|es)\s+(?:residir|vivir|estar\s+(?:ubicad|radicad)\w*)\s+en\b"
     r"|\b(?:us|u\.s\.|usa)[- ]only\b"
     r"|remote\s+(?:with)?in\s+(?:the\s+)?(?:us|united states|canada|europe|eu|uk|colombia|mexico|"
     r"m[eé]xico|brazil|brasil|argentina|chile|peru|per[uú])\b"
@@ -109,10 +112,10 @@ def years_required(text: str) -> int | None:
         if YEARS_NOISE_RE.search(before):   # "Looking For\n 5+ years" is a requirement
             continue
         after = text[m.end():m.end() + 60].lower()
-        if not re.search(r"experien|of |in |building|develop|work|professional|hands|de |con ", after):
+        if not re.search(r"experien|of |in |as an? |building|develop|work|professional|hands|de |con |como ", after):
             continue
         low = _to_int(m.group(1))
-        if low is None or not 1 <= low <= 12:
+        if low is None or not 1 <= low <= 20:  # "15+ years in software" is a requirement too
             continue
         found.append(low)  # for a range "3-5 years" the lower bound is the requirement
     return max(found) if found else None

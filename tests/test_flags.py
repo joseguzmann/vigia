@@ -301,7 +301,9 @@ def test_visa_and_relocation_wording(profile):
     from vigia.flags import NO_VISA_RE, VISA_RE
     def offer(text):
         return bool(VISA_RE.search(text)) and not NO_VISA_RE.search(text)
-    assert offer("Relocation is available for candidates who require it.")
+    assert not offer("Relocation is available for candidates who require it.")
+    assert not offer("Work/Life Balance: flexible paid time off, relocation assistance")
+    assert offer("We sponsor H1B, O1, EB1, L1, STEM OPT, and more.")
     assert offer("We offer visa sponsorship and a relocation package.")
     assert not offer("**Visa Sponsorship:** Not available")
     assert not offer("SF-based or willing to relocate immediately.")
@@ -340,3 +342,18 @@ def test_region_names_in_a_country_list_include_ecuador(profile):
         assert evaluate(j, profile)[2]["region"] == "ok", countries
     j.tags = ["countries:Belize, El Salvador, Honduras"]
     assert evaluate(j, profile)[2]["region"] == "restricted"
+
+
+def test_years_as_a_role_and_long_requirements():
+    assert years_required("Respond to incidents.\n 5+ years as a DBA or Database Engineer") == 5
+    assert years_required("Required\n 15+ years in software engineering, platform") == 15
+    assert years_required("For over 25 years, we've built the systems") is None
+
+
+def test_spanish_residence_restrictions(profile):
+    def reg(text):
+        return region(Job(source="getonbrd", source_id="1", title="Backend", company="X", url="https://x",
+                          location="Remote", description=text), profile)[0]
+    assert reg("Buscamos candidatos que residan en República Dominicana, con experiencia en Java") == "restricted"
+    assert reg("El candidato debe residir en Colombia.") == "restricted"
+    assert reg("Buscamos personas que residan en Ecuador o LATAM") != "restricted"
