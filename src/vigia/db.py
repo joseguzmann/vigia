@@ -241,6 +241,11 @@ def discovered_slugs(ats: str, status: str | None = "watching") -> list[str]:
     return [r["slug"] for r in conn().execute(q, (ats, status) if status else (ats,))]
 
 
+def discovered_board(ats: str, slug: str):
+    """The discovered_boards row for this board (found_at is when it was last checked), or None."""
+    return conn().execute("SELECT * FROM discovered_boards WHERE ats = ? AND slug = ?", (ats, slug.lower())).fetchone()
+
+
 def add_discovered(ats: str, slug: str, status: str, query: str, example: str, in_scope: int) -> None:
     conn().execute("INSERT OR REPLACE INTO discovered_boards VALUES (?, ?, ?, ?, ?, ?, ?)",
                    (ats, slug, status, now(), query, example, in_scope))

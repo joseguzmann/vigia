@@ -8,7 +8,9 @@ find *where* to look, not as postings:
   1. read the files covering the last `days` days and keep in-scope titles that are remote
      (or say nothing) and whose country is unknown, the home country or open to the region
   2. ATS that Vigía reads (Greenhouse, Ashby, Lever, Workday...): check the company's board
-     once, like `discover`; watched from then on if anything passes the filters
+     once, like `discover`; watched from then on if anything passes the filters. A company
+     rejected before is read again when it posts such a role and was last checked over
+     `recheck_days` ago (a new role at a known company is the freshest signal there is)
   3. other ATS (BambooHR, Rippling, Personio...): read the posting's own page and its
      schema.org JobPosting, up to `max_pages` per run
 """
@@ -27,7 +29,7 @@ from vigia.sources.base import Source, job_posting_ld, ld_to_job
 from vigia.sources.discover import check_board, is_known
 
 BASE = "https://openroles.today/data/"
-READABLE = {"greenhouse", "ashby", "lever", "smartrecruiters", "breezy", "recruitee", "workable", "teamtailor"}
+READABLE = {"bamboohr", "rippling", "manatal", "greenhouse", "ashby", "lever", "smartrecruiters", "breezy", "recruitee", "workable", "teamtailor"}
 WORKDAY_RE = re.compile(r"https?://([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?([^/?#]+)", re.I)
 OPEN_LOC_RE = re.compile(r"latam|latin america|south america|americas|worldwide|anywhere|global", re.I)
 
@@ -55,6 +57,14 @@ class OpenRoles(Source):
             return False
         # Unknown country or the home country; otherwise only a location open to the region.
         return row.get("cc") in (None, home) or bool(OPEN_LOC_RE.search(row.get("loc") or ""))
+
+    def stale_rejected(self, ats: str, slug: str) -> bool:
+        """Rejected, and last checked more than `recheck_days` ago."""
+        row = db.discovered_board(ats, slug)
+        if row is None or row["status"] != "rejected":
+            return False
+        last = datetime.fromisoformat(row["found_at"])
+        return datetime.now(timezone.utc) - last > timedelta(days=float(self.cfg.get("recheck_days", 14)))
 
     def rows(self):
         """Postings from the files covering the last `days` days, one file at a time."""
@@ -90,16 +100,24 @@ class OpenRoles(Source):
 
         out: list[Job] = []
         budget = int(self.cfg.get("max_new_boards", 60))
+        rechecks = int(self.cfg.get("max_rechecks", 60))
         for (ats, slug), title in boards.items():
-            if budget <= 0:
-                break
+            origin = "openroles"
             if is_known(ats, slug):
+                # A company once read with nothing for us is posting an in-scope remote role now:
+                # read it again, unless that was recent.
+                if not self.stale_rejected(ats, slug) or rechecks <= 0:
+                    continue
+                rechecks -= 1
+                origin = db.discovered_board(ats, slug)["query"] or origin
+            elif budget <= 0:
                 continue
-            budget -= 1
+            else:
+                budget -= 1
             try:
-                out += check_board(ats, slug, "openroles", title)
+                out += check_board(ats, slug, origin, title)
             except http.Throttled:
-                break  # unchecked boards stay unknown and come up again
+                break  # unchecked boards stay as they were and come up again
 
         ids = {r["i"]: r for r in pages}
         known = db.known_source_ids(self.name, list(ids))

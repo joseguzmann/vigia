@@ -163,6 +163,21 @@ sources:
     enabled: true
     every_minutes: 360
     boards: [namecheap, aerolab, crazygames, ifit, testgorilla, coursera]
+  bamboohr:
+    # Public careers JSON per company ({slug}.bamboohr.com/careers/list); companies are added
+    # by the discovery loads and openroles.
+    enabled: true
+    every_minutes: 360
+    boards: []
+  rippling:
+    enabled: true
+    every_minutes: 360
+    boards: []
+  manatal:
+    # careers-page.com; many boards are recruiting agencies.
+    enabled: true
+    every_minutes: 360
+    boards: []
   remoteok:
     enabled: true
     every_minutes: 360

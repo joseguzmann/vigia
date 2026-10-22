@@ -65,7 +65,7 @@ verdict, so the person only reads what survives.
 | `workday` | Career sites of large companies, searched for development roles | public JSON |
 | `indeed` | Indeed searches per country (Ecuador), via the mobile app's GraphQL API, as [JobSpy](https://github.com/speedyapply/JobSpy) (MIT) does | GraphQL |
 | `greenhouse`, `ashby`, `lever` | Career pages of companies you choose to watch | public APIs |
-| `teamtailor`, `workable`, `smartrecruiters`, `breezy`, `recruitee` | More company career pages, on other applicant-tracking systems | RSS / public APIs (Breezy: job page) |
+| `teamtailor`, `workable`, `smartrecruiters`, `breezy`, `recruitee`, `bamboohr`, `rippling`, `manatal` | More company career pages, on other applicant-tracking systems | RSS / public APIs (Breezy: job page; BambooHR, Rippling: one detail call per in-scope opening) |
 | `remotive`, `himalayas`, `jobicy`, `remoteok` | Remote job boards | public APIs |
 | `hn_whoishiring` | Hacker News monthly "Who is hiring?" thread | Algolia HN API |
 | `workingnomads`, `weworkremotely` | Remote job boards | JSON API / RSS |

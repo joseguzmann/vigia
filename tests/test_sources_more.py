@@ -395,7 +395,8 @@ def test_openroles_maps_rows_to_boards_and_keeps_open_remote_roles():
     from vigia.sources.openroles import OpenRoles, board_of
     assert board_of({"a": "ashby", "t": "Acme", "u": "https://jobs.ashbyhq.com/Acme/1"}) == ("ashby", "acme")
     assert board_of({"a": "workday", "t": "x", "u": "https://acme.wd5.myworkdayjobs.com/en-US/Careers/job/Remote/AI_123"}) == ("workday", "acme/wd5/Careers")
-    assert board_of({"a": "bamboohr", "t": "acme", "u": "https://acme.bamboohr.com/careers/32"}) is None
+    assert board_of({"a": "bamboohr", "t": "acme", "u": "https://acme.bamboohr.com/careers/32"}) == ("bamboohr", "acme")
+    assert board_of({"a": "personio", "t": "acme", "u": "https://acme.jobs.personio.de/job/32"}) is None
     src, prof = OpenRoles({}), {"title_include": ["AI Engineer"], "title_exclude": []}
     row = {"ti": "AI Engineer", "w": "remote", "cc": None, "loc": "Remote", "l": None}
     assert src.wanted(row, prof, "EC")
@@ -466,7 +467,7 @@ def test_a_throttled_board_is_left_unchecked(monkeypatch):
 def test_openroles_keeps_what_it_found_when_pages_are_throttled(monkeypatch):
     from vigia.sources import openroles
     rows = [{"i": "a", "a": "ashby", "t": "good", "ti": "AI Engineer"},
-            {"i": "b", "a": "bamboohr", "t": "x", "ti": "AI Engineer", "u": "https://x/1"}]
+            {"i": "b", "a": "personio", "t": "x", "ti": "AI Engineer", "u": "https://x/1"}]
     src = openroles.OpenRoles({})
     monkeypatch.setattr(src, "rows", lambda: iter(rows))
     monkeypatch.setattr(src, "wanted", lambda r, p, h: True)
@@ -478,3 +479,73 @@ def test_openroles_keeps_what_it_found_when_pages_are_throttled(monkeypatch):
         raise http.Throttled("429")
     monkeypatch.setattr(openroles.http, "get", get)
     assert src.fetch() == ["job from board"]
+
+
+def test_openroles_rechecks_rejected_companies_that_post_again(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from vigia.sources import openroles
+    old = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    new = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    rows = {("ashby", "stale"): {"status": "rejected", "found_at": old, "query": "dataset"},
+            ("ashby", "recent"): {"status": "rejected", "found_at": new, "query": "dataset"},
+            ("ashby", "watched"): {"status": "watching", "found_at": old, "query": "dataset"}}
+    src = openroles.OpenRoles({})
+    monkeypatch.setattr(src, "rows", lambda: iter([{"i": s, "a": "ashby", "t": s, "ti": "AI Engineer"}
+                                                    for s in ("stale", "recent", "watched", "brand-new")]))
+    monkeypatch.setattr(src, "wanted", lambda r, p, h: True)
+    monkeypatch.setattr(openroles.config, "profile", lambda: {})
+    monkeypatch.setattr(openroles, "is_known", lambda ats, slug: (ats, slug) in rows)
+    monkeypatch.setattr(openroles.db, "discovered_board", lambda ats, slug: rows.get((ats, slug)))
+    monkeypatch.setattr(openroles.db, "known_source_ids", lambda s, ids: set())
+    checked = []
+    monkeypatch.setattr(openroles, "check_board", lambda ats, slug, origin, title: checked.append((slug, origin)) or [])
+    src.fetch()
+    assert checked == [("stale", "dataset"), ("brand-new", "openroles")]
+
+
+def test_bamboohr_reads_details_only_for_in_scope_titles(monkeypatch):
+    lst = {"result": [{"id": "32", "jobOpeningName": "AI Software Engineer", "locationType": "1",
+                       "atsLocation": {"country": "Colombia"}},
+                      {"id": "33", "jobOpeningName": "Account Executive", "locationType": "1"},
+                      {"id": "34", "jobOpeningName": "Backend Engineer", "locationType": "0",
+                       "atsLocation": {"city": "Bogotá", "country": "Colombia"}}]}
+    detail = {"32": {"jobOpeningShareUrl": "https://acme.bamboohr.com/careers/32", "locationType": "1",
+                     "description": "<p>Remote, Latam | 4+ years</p>", "datePosted": "2026-10-20"},
+              "34": {"locationType": "0", "description": "<p>On-site</p>", "datePosted": "2026-10-01"}}
+    asked = []
+    def get_json(src, kind, url, **k):
+        asked.append(url)
+        if url.endswith("/list"):
+            return lst
+        return {"result": {"jobOpening": detail[url.split("/")[-2]]}}
+    monkeypatch.setattr(http, "get_json", get_json)
+    monkeypatch.setattr(ats_more, "_in_scope", lambda t: "Engineer" in t)
+    jobs = ats_more.BambooHR({"boards": ["acme"]}).fetch()
+    assert [j.source_id for j in jobs] == ["acme/32", "acme/34"]
+    assert not any("/33/" in u for u in asked)  # out-of-scope titles cost no extra request
+    assert jobs[0].location == "Remote" and jobs[0].remote and "Remote, Latam" in jobs[0].description
+    assert jobs[1].location == "Bogotá, Colombia" and jobs[1].remote is False
+
+
+def test_rippling_and_manatal(monkeypatch):
+    def get_json(src, kind, url, **k):
+        if "rippling" in url and url.endswith("/jobs"):
+            return [{"uuid": "u1", "name": "Backend Engineer", "url": "https://ats.rippling.com/acme/jobs/u1",
+                     "workLocation": {"label": "Remote (Brazil)"}},
+                    {"uuid": "u2", "name": "Barista", "workLocation": {"label": "NYC"}}]
+        if "rippling" in url:
+            assert url.endswith("/u1")
+            return {"description": {"company": "<p>About</p>", "role": "<p>Python</p>"},
+                    "workLocations": ["Remote (Brazil)"], "createdOn": "2026-10-09T10:59:35-07:00"}
+        if "page=2" in url:
+            return {"results": [{"id": 2, "hash": "H2", "position_name": "AI Engineer", "description": "<p>LLM</p>",
+                                 "location_display": "", "is_remote": True}], "next": None}
+        return {"results": [{"id": 1, "hash": "H1", "position_name": "Sales Rep", "description": ""}],
+                "next": "https://core.api.manatal.com/open/v3/career-page/agency/jobs/?page=2"}
+    monkeypatch.setattr(http, "get_json", get_json)
+    monkeypatch.setattr(ats_more, "_in_scope", lambda t: "Engineer" in t)
+    r = ats_more.Rippling({"boards": ["acme"]}).fetch()
+    assert [(j.title, j.location, j.remote) for j in r] == [("Backend Engineer", "Remote (Brazil)", True)]
+    assert "Python" in r[0].description and r[0].posted_at.year == 2026
+    m = ats_more.Manatal({"boards": ["agency"]}).fetch()
+    assert [(j.title, j.url) for j in m] == [("AI Engineer", "https://www.careers-page.com/agency/job/H2")]

@@ -184,6 +184,89 @@ class Recruitee(_Boards):
         return out
 
 
+class BambooHR(_Boards):
+    """Public careers JSON: the list gives titles; the text, date and work mode come from each
+    opening's detail, read only for in-scope titles. locationType: 1 remote, 2 hybrid, 0 on-site.
+    A remote opening keeps "Remote" as its location: the country BambooHR lists for it is usually
+    the company's own, and the text says where it hires."""
+    name = "bamboohr"
+
+    def board(self, slug):
+        base = f"https://{slug}.bamboohr.com/careers"
+        data = http.get_json(self.name, slug, f"{base}/list")
+        out = []
+        for j in (data or {}).get("result") or []:
+            title = j.get("jobOpeningName") or ""
+            if not j.get("id") or not _in_scope(title):
+                continue
+            d = ((http.get_json(self.name, slug, f"{base}/{j['id']}/detail") or {}).get("result") or {}).get("jobOpening") or {}
+            kind = str(d.get("locationType") or j.get("locationType") or "")
+            loc = d.get("atsLocation") or j.get("atsLocation") or {}
+            place = ", ".join(x for x in (loc.get("city"), loc.get("state") or loc.get("province"), loc.get("country")) if x)
+            remote = kind == "1" or bool(j.get("isRemote"))
+            out.append(Job(
+                source=self.name, source_id=f"{slug}/{j['id']}", title=title, company=slug,
+                url=d.get("jobOpeningShareUrl") or f"{base}/{j['id']}",
+                location="Remote" if remote else place + (" (Hybrid)" if kind == "2" else ""),
+                remote=remote if kind else None, posted_at=parse_date(d.get("datePosted")),
+                description=strip_html(d.get("description") or ""),
+                salary=str(d.get("compensation") or ""),
+            ))
+        return out
+
+
+class Rippling(_Boards):
+    """Public board API: the list gives titles and work locations ("Remote (Brazil)"); the text and
+    date come from each job's detail, read only for in-scope titles."""
+    name = "rippling"
+
+    def board(self, slug):
+        base = f"https://api.rippling.com/platform/api/ats/v1/board/{slug}/jobs"
+        out = []
+        for j in http.get_json(self.name, slug, base) or []:
+            title = j.get("name") or ""
+            if not j.get("uuid") or not _in_scope(title):
+                continue
+            d = http.get_json(self.name, slug, f"{base}/{j['uuid']}") or {}
+            desc = d.get("description") or ""
+            if isinstance(desc, dict):  # {"company": html, "role": html}
+                desc = "\n".join(str(v) for v in desc.values())
+            places = d.get("workLocations") or [(j.get("workLocation") or {}).get("label") or ""]
+            location = "; ".join(x for x in places if x)
+            out.append(Job(
+                source=self.name, source_id=f"{slug}/{j['uuid']}", title=title, company=slug,
+                url=j.get("url") or f"https://ats.rippling.com/{slug}/jobs/{j['uuid']}",
+                location=location, remote=True if "remote" in location.lower() else None,
+                posted_at=parse_date(d.get("createdOn")), description=strip_html(desc),
+            ))
+        return out
+
+
+class Manatal(_Boards):
+    """careers-page.com (Manatal): a paged public API with the full text in the list. Many boards
+    are recruiting agencies hiring for several clients. No posting date is published."""
+    name = "manatal"
+
+    def board(self, slug):
+        url, out = f"https://api.manatal.com/open/v3/career-page/{slug}/jobs/", []
+        for _ in range(int(self.cfg.get("max_pages", 5))):
+            data = http.get_json(self.name, slug, url) or {}
+            for j in data.get("results") or []:
+                title = j.get("position_name") or ""
+                if not _in_scope(title):
+                    continue
+                out.append(Job(
+                    source=self.name, source_id=f"{slug}/{j.get('id')}", title=title, company=slug,
+                    url=f"https://www.careers-page.com/{slug}/job/{j.get('hash')}",
+                    location=j.get("location_display") or "", remote=j.get("is_remote"),
+                    description=strip_html(j.get("description") or ""),
+                ))
+            url = data.get("next")
+            if not url:
+                break
+        return out
+
+
 def _rfc822(value: str | None):
     from email.utils import parsedate_to_datetime
     try:
