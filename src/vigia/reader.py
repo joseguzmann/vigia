@@ -92,7 +92,10 @@ def read_claude_p(system: str, user: str, model: str) -> tuple[dict, dict]:
     args = ["claude", "-p", "--model", model, "--system-prompt", system, "--json-schema", json.dumps(SCHEMA),
             "--output-format", "json", "--tools", "", "--strict-mcp-config", "--setting-sources", "",
             "--no-session-persistence"]
-    p = subprocess.run(args, input=user, capture_output=True, text=True, cwd=_EMPTY_DIR,
+    # Claude Code prefers ANTHROPIC_API_KEY over the subscription token when both are set, which
+    # would bill the API (seen 2026-10-22). This reader is the subscription one: drop the API keys.
+    env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
+    p = subprocess.run(args, input=user, capture_output=True, text=True, cwd=_EMPTY_DIR, env=env,
                        timeout=int(cfg().get("timeout_seconds", 300)))
     try:
         out = json.loads(p.stdout)

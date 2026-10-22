@@ -94,3 +94,21 @@ def test_backlog_is_scored_but_not_pushed(monkeypatch):
     monkeypatch.setattr(reader, "read_claude_p", lambda *a: (reading(9), {}))
     assert reader.run() == {"read": 1, "notified": 0, "pending": 0}
     assert sent == []
+
+
+def test_claude_p_never_sees_the_api_key(monkeypatch):
+    import json as _json
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api-should-not-be-used")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-subscription")
+    monkeypatch.setattr(reader, "cfg", lambda: {})
+    seen = {}
+    class P:
+        returncode = 0
+        stderr = ""
+        stdout = _json.dumps({"structured_output": reading(), "modelUsage": {}})
+    def run(args, **kw):
+        seen.update(kw["env"])
+        return P()
+    monkeypatch.setattr(reader.subprocess, "run", run)
+    reader.read_claude_p("system", "user", "sonnet")
+    assert "ANTHROPIC_API_KEY" not in seen and seen["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-subscription"

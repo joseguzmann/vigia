@@ -168,7 +168,8 @@ Readers are tried in order (`reader.readers`):
 - `claude-p` runs the Claude Code CLI in print mode on the subscription it is signed in with
   (`CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`; build the image with
   `INSTALL_CLAUDE_CODE=1`). It runs with no tools, no MCP servers and no settings, because the
-  prompt carries untrusted text. Subscription use outside interactive Claude Code is governed by
+  prompt carries untrusted text. It runs without `ANTHROPIC_API_KEY` in its environment: with
+  both set, Claude Code bills the API instead of the subscription. Subscription use outside interactive Claude Code is governed by
   Anthropic's terms, which have changed during 2026: check them.
 - `anthropic` / `openai` call the API through LangChain, with a monthly budget (`api_budget_usd`).
 
