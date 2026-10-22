@@ -165,14 +165,15 @@ def api_spent_this_month() -> float:
 # --- the loop --------------------------------------------------------------------------
 
 def pending(limit: int) -> list[dict]:
-    """Jobs worth reading that have no reading yet, newest first."""
+    """Jobs worth reading that have no reading yet: fits, then reviews, then extras; newest first."""
     days = int(cfg().get("max_age_days", 14))
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
     rows = db.conn().execute(
         """SELECT j.* FROM jobs j LEFT JOIN job_readings r ON r.job_id = j.id
            WHERE r.job_id IS NULL AND j.verdict IN ('fit', 'review', 'extra') AND j.first_seen >= ?
            AND length(coalesce(j.description, '')) >= 200
-           ORDER BY j.first_seen DESC LIMIT ?""", (since, limit)).fetchall()
+           ORDER BY CASE j.verdict WHEN 'fit' THEN 0 WHEN 'review' THEN 1 ELSE 2 END, j.first_seen DESC
+           LIMIT ?""", (since, limit)).fetchall()
     return [dict(r) for r in rows]
 
 
