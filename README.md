@@ -147,6 +147,26 @@ The container runs `vigia serve`: a loop that runs each enabled source when its
 | `vigia app stats` / `vigia app export` | the experiment as JSON / every application as Markdown |
 | `vigia app import FILE.json` | bulk load from an older log |
 
+## Job reader (LLM ranking)
+
+The rules decide what is in or out; an LLM then reads each new fit, review and extra against the
+CV of its family (ai, backend, fullstack) and answers, as structured output: can the candidate be
+hired from where they live (with the sentence that decides it), visa sponsorship, years asked,
+level, hard requirements the CV lacks, and a 1–10 match with one line of why. `new_jobs` is
+ordered by it, and only open roles at or above `notify_min_match` reach the phone.
+
+Readers are tried in order (`reader.readers`):
+
+- `claude-p` runs the Claude Code CLI in print mode on the subscription it is signed in with
+  (`CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`; build the image with
+  `INSTALL_CLAUDE_CODE=1`). It runs with no tools, no MCP servers and no settings, because the
+  prompt carries untrusted text. Subscription use outside interactive Claude Code is governed by
+  Anthropic's terms, which have changed during 2026: check them.
+- `anthropic` / `openai` call the API through LangChain, with a monthly budget (`api_budget_usd`).
+
+When one fails the next reads the job and the phone gets one alert (at most every
+`alert_every_hours`). Each job is read once; readings live in the `job_readings` table.
+
 ## Applications
 
 Vigía also keeps the record of the job search: every application, found by Vigía or entered by

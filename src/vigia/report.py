@@ -34,13 +34,16 @@ def new_jobs(since: str | None = None, include_out: bool = False, limit: int = 6
                  f"{len(groups[v])} {VERDICT_TITLES[v].lower()}" for v in ("fit", "extra", "review", "out")), ""]
     applied = {r["job_id"]: r["number"] for r in db.conn().execute(
         "SELECT job_id, number FROM applications WHERE job_id IS NOT NULL")}
+    read = db.readings([r["id"] for r in rows if r["verdict"] != "out"])
     for verdict in ("fit", "extra", "review"):
-        # Freshest first: a posting applied to in its first 48 h competes with few others.
-        items = sorted(groups[verdict], key=lambda r: (-_freshness_rank(r), -(r["score"] or 0)))[:limit]
+        # Best reading first (open to the candidate, then the LLM's match), then freshest: a posting
+        # applied to in its first 48 h competes with few others. Unread jobs go after the read ones.
+        items = sorted(groups[verdict], key=lambda r: (-_reading_rank(read.get(r["id"])), -_freshness_rank(r),
+                                                       -(r["score"] or 0)))[:limit]
         if not items:
             continue
         lines += [f"## {VERDICT_TITLES[verdict]} ({len(groups[verdict])})", ""]
-        lines += [_job_block(r, applied.get(r["id"])) for r in items]
+        lines += [_job_block(r, applied.get(r["id"]), read.get(r["id"])) for r in items]
 
     out_rows = groups["out"]
     if out_rows:
@@ -55,12 +58,21 @@ def new_jobs(since: str | None = None, include_out: bool = False, limit: int = 6
     return "\n".join(lines)
 
 
+def _reading_rank(rd) -> float:
+    """Read and open: 10 + match (11-20). Unread: 5. Read and closed to the candidate (no, and no
+    visa): match - 10 (below everything else)."""
+    if rd is None:
+        return 5
+    closed = rd["eligible"] == "no" and rd["visa"] != "yes"
+    return rd["match"] - 10 if closed else rd["match"] + 10
+
+
 def _freshness_rank(r) -> int:
     age = json.loads(r["flags"] or "{}").get("age_days")
     return 3 if age is not None and age <= 2 else 2 if age is not None and age <= 7 else 1 if age is None else 0
 
 
-def _job_block(r, applied_number: int | None = None) -> str:
+def _job_block(r, applied_number: int | None = None, reading=None) -> str:
     f = json.loads(r["flags"] or "{}")
     seen = json.loads(r["seen_in"] or "[]")
     meta = [r["location"] or "location n/a"]
@@ -79,6 +91,13 @@ def _job_block(r, applied_number: int | None = None) -> str:
     done = f" ✅ applied #{applied_number}" if applied_number is not None else ""
     block = [f"### {badge}{r['title']} — {r['company']}  `{r['score']}` · job {r['id']}{done}",
              " · ".join(m for m in meta if m)]
+    if reading is not None:
+        open_note = {"yes": "open to you", "no": "not open to you", "unclear": "eligibility unclear"}.get(reading["eligible"], "")
+        if reading["visa"] == "yes":
+            open_note += ", visa sponsored"
+        blockers = json.loads(reading["blockers"] or "[]")
+        block.append(f"**{reading['match']}/10** · {open_note} · {reading['why']}"
+                     + (f" Blockers: {'; '.join(blockers)}." if blockers else ""))
     if f.get("stack"):
         block.append("stack: " + ", ".join(f["stack"]))
     if f.get("reasons"):

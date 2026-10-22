@@ -1,6 +1,10 @@
 services:
   vigia:
-    build: .
+    build:
+      context: .
+      args:
+        # 1 to include the Claude Code CLI (job reader through `claude -p`).
+        INSTALL_CLAUDE_CODE: ${INSTALL_CLAUDE_CODE:-0}
     image: vigia:latest
     container_name: vigia
     restart: unless-stopped
@@ -21,7 +25,10 @@ services:
   # Private web UI over the same database. Published on localhost only: open it through
   # an SSH tunnel (Docker's published ports bypass the host firewall).
   vigia-web:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_CLAUDE_CODE: ${INSTALL_CLAUDE_CODE:-0}
     image: vigia:latest
     container_name: vigia-web
     restart: unless-stopped

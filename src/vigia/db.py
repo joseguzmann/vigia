@@ -67,6 +67,23 @@ CREATE TABLE IF NOT EXISTS state (
 
 -- Company boards found by the `discover` source. 'watching' boards are read by their ATS
 -- source like the ones in the config; 'rejected' ones had nothing in scope when checked.
+CREATE TABLE IF NOT EXISTS job_readings (
+    job_id        INTEGER PRIMARY KEY,
+    read_at       TEXT NOT NULL,
+    model         TEXT NOT NULL,
+    eligible      TEXT,
+    quote         TEXT,
+    visa          TEXT,
+    years         INTEGER,
+    level         TEXT,
+    blockers      TEXT,
+    match         INTEGER,
+    why           TEXT,
+    input_tokens  INTEGER,
+    output_tokens INTEGER,
+    cost_usd      REAL
+);
+
 CREATE TABLE IF NOT EXISTS discovered_boards (
     ats        TEXT NOT NULL,
     slug       TEXT NOT NULL,
@@ -244,6 +261,21 @@ def discovered_slugs(ats: str, status: str | None = "watching") -> list[str]:
 def discovered_board(ats: str, slug: str):
     """The discovered_boards row for this board (found_at is when it was last checked), or None."""
     return conn().execute("SELECT * FROM discovered_boards WHERE ats = ? AND slug = ?", (ats, slug.lower())).fetchone()
+
+
+def save_reading(job_id: int, model: str, r: dict, usage: dict) -> None:
+    conn().execute("INSERT OR REPLACE INTO job_readings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                   (job_id, now(), model, r["ecuador_eligible"], r.get("eligibility_quote", ""), r["visa_sponsorship"],
+                    r.get("years_required"), r["level"], json.dumps(r.get("blockers") or []), r["match"], r["why"],
+                    usage.get("input_tokens", 0), usage.get("output_tokens", 0), usage.get("cost_usd", 0.0)))
+    conn().commit()
+
+
+def readings(job_ids: list[int]) -> dict[int, sqlite3.Row]:
+    if not job_ids:
+        return {}
+    marks = ",".join("?" * len(job_ids))
+    return {r["job_id"]: r for r in conn().execute(f"SELECT * FROM job_readings WHERE job_id IN ({marks})", job_ids)}
 
 
 def add_discovered(ats: str, slug: str, status: str, query: str, example: str, in_scope: int) -> None:

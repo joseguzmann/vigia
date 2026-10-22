@@ -330,3 +330,21 @@ notify:
   quiet_hours: [22, 8]      # local time; nothing is sent in between
   timezone: America/Guayaquil
   max_per_run: 5            # the rest of a run's new fits go into one summary message
+
+# An LLM reads each new fit/review/extra against the CV and scores it 1-10 (see src/vigia/reader.py).
+# new_jobs is ordered by it, and only good open roles notify the phone. CV files are plain text in
+# cv_dir (keep them out of git: secrets/ is mounted at /app/secrets).
+reader:
+  enabled: false
+  every_minutes: 5
+  per_run: 10
+  max_age_days: 14
+  notify_min_match: 7
+  alert_every_hours: 6
+  api_budget_usd: 3          # per month, for the API readers
+  candidate: "The candidate lives in <city, country>. They can work remotely, or on-site/hybrid in <city>; they would move abroad only with visa sponsorship."
+  cv_dir: /app/secrets/cv
+  cvs: {ai: cv_ai.txt, backend: cv_backend.txt, fullstack: cv_fullstack.txt}
+  readers:                   # tried in order; a failure moves to the next and notifies
+    - {provider: claude-p, model: sonnet}
+    - {provider: anthropic, model: claude-haiku-5-5, price: [0.10, 0.50]}

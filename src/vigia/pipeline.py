@@ -8,7 +8,7 @@ import signal
 import time
 from datetime import datetime, timedelta, timezone
 
-from vigia import config, db, flags, http, notify
+from vigia import config, db, flags, http, notify, reader
 from vigia.linkedin_guest import Blocked
 from vigia.sources import REGISTRY
 
@@ -36,7 +36,8 @@ def run_source(name: str, src=None) -> dict:
                 new += 1
                 if verdict == "fit":
                     fits.append((job, score))
-        notify.new_fits(name, fits)
+        if not config.load().get("reader", {}).get("enabled"):
+            notify.new_fits(name, fits)  # with the reader on, it notifies after scoring instead
     except http.Throttled as e:
         error = f"throttled: {e}"
     except Blocked as e:
@@ -116,6 +117,14 @@ def serve() -> None:
                 break
             if due(name):
                 run_source(name)
+            if reader.due() and not stop["now"]:
+                db.set_state("reader.last_run", db.now())
+                try:
+                    summary = reader.run()
+                    if summary["read"]:
+                        log.info("reader %s", summary)
+                except Exception:  # noqa: BLE001 — the reader must not stop the sources
+                    log.exception("reader failed")
         db.set_state("heartbeat", db.now())
         for _ in range(TICK_SECONDS):
             if stop["now"]:
