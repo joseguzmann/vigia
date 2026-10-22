@@ -2,8 +2,8 @@ from vigia import db, notify, reader, report
 from vigia.models import Job
 
 
-def reading(match=8, eligible="yes", visa="not_stated", why="Fits."):
-    return {"ecuador_eligible": eligible, "eligibility_quote": "", "visa_sponsorship": visa, "years_required": 3,
+def reading(match=8, eligible="yes", visa="not_stated", why="Fits.", posting=True):
+    return {"is_job_posting": posting, "ecuador_eligible": eligible, "eligibility_quote": "", "visa_sponsorship": visa, "years_required": 3,
             "level": "mid", "blockers": [], "match": match, "why": why}
 
 
@@ -27,18 +27,19 @@ def test_reads_pending_jobs_and_notifies_only_good_open_ones(monkeypatch):
     sent = []
     setup(monkeypatch, [{"provider": "claude-p", "model": "sonnet"}], sent)
     good, closed, weak = store("Backend Engineer"), store("Platform Engineer"), store("Data Engineer", "review")
+    promo = store("Hiring Roundup")
     answers = {"Backend Engineer": reading(9), "Platform Engineer": reading(9, eligible="no"),
-               "Data Engineer": reading(5)}
+               "Data Engineer": reading(5), "Hiring Roundup": reading(9, posting=False)}
     seen = []
     def fake(system, user, model):
         seen.append((model, "CV for backend" in system, "Lives in Quito." in system))
         title = user.split("Title: ")[1].split("\n")[0]
         return answers[title], {"input_tokens": 10, "output_tokens": 5, "cost_usd": 0.0}
     monkeypatch.setattr(reader, "read_claude_p", fake)
-    assert reader.run() == {"read": 3, "notified": 1, "pending": 0}
+    assert reader.run() == {"read": 4, "notified": 1, "pending": 0}
     assert all(s == ("sonnet", True, True) for s in seen)
     assert sent == [("9/10 · Backend Engineer", "star")]
-    assert set(db.readings([good, closed, weak])) == {good, closed, weak}
+    assert set(db.readings([good, closed, weak, promo])) == {good, closed, weak, promo}
     assert reader.pending(10) == []  # read once, never paid for twice
 
 

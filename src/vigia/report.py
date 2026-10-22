@@ -64,7 +64,8 @@ def _reading_rank(rd) -> float:
     if rd is None:
         return 5
     closed = rd["eligible"] == "no" and rd["visa"] != "yes"
-    return rd["match"] - 10 if closed else rd["match"] + 10
+    not_a_role = rd["is_posting"] == 0  # a promotional post or a list of roles
+    return rd["match"] - 10 if closed or not_a_role else rd["match"] + 10
 
 
 def _freshness_rank(r) -> int:
@@ -96,6 +97,8 @@ def _job_block(r, applied_number: int | None = None, reading=None) -> str:
         if reading["visa"] == "yes":
             open_note += ", visa sponsored"
         blockers = json.loads(reading["blockers"] or "[]")
+        if reading["is_posting"] == 0:
+            open_note = "not a specific role"
         block.append(f"**{reading['match']}/10** · {open_note} · {reading['why']}"
                      + (f" Blockers: {'; '.join(blockers)}." if blockers else ""))
     if f.get("stack"):

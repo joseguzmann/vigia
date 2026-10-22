@@ -30,9 +30,14 @@ log = logging.getLogger("vigia")
 
 SCHEMA = {
     "type": "object", "additionalProperties": False,
-    "required": ["ecuador_eligible", "eligibility_quote", "visa_sponsorship", "years_required", "level",
-                 "blockers", "match", "why"],
+    "required": ["is_job_posting", "ecuador_eligible", "eligibility_quote", "visa_sponsorship", "years_required",
+                 "level", "blockers", "match", "why"],
     "properties": {
+        "is_job_posting": {"type": "boolean",
+                           "description": "True if the text offers one specific open role (one employer or one client, "
+                                          "one position, even if it has several openings). False for promotional or "
+                                          "blog-style posts, lists of many different roles, generic 'we are always "
+                                          "hiring' or talent-pool calls, and articles."},
         "ecuador_eligible": {"type": "string", "enum": ["yes", "no", "unclear"],
                              "description": "Can the candidate be hired for this role as written, from where they live? "
                                             "'no' if it requires living/working in another country without visa "
@@ -179,7 +184,8 @@ def pending(limit: int) -> list[dict]:
 
 def worth_notifying(reading: dict, job: dict | None = None) -> bool:
     open_to_me = reading["ecuador_eligible"] != "no" or reading["visa_sponsorship"] == "yes"
-    good = open_to_me and reading["match"] >= int(cfg().get("notify_min_match", 7))
+    good = (open_to_me and reading.get("is_job_posting", True)
+            and reading["match"] >= int(cfg().get("notify_min_match", 7)))
     if not good or job is None:
         return good
     # A backlog read (reader just switched on, or catching up) is scored but not pushed.

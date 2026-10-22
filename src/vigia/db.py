@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS job_readings (
     blockers      TEXT,
     match         INTEGER,
     why           TEXT,
+    is_posting    INTEGER,
     input_tokens  INTEGER,
     output_tokens INTEGER,
     cost_usd      REAL
@@ -123,6 +124,9 @@ def conn() -> sqlite3.Connection:
         from vigia import applications, mail  # their tables live in the same file
         _conn.executescript(applications.SCHEMA)
         _conn.executescript(mail.SCHEMA)
+        cols = {r["name"] for r in _conn.execute("PRAGMA table_info(job_readings)")}
+        if "is_posting" not in cols:  # added 2026-10-22
+            _conn.execute("ALTER TABLE job_readings ADD COLUMN is_posting INTEGER")
     return _conn
 
 
@@ -274,10 +278,13 @@ def kept_urls(source: str, days: int) -> str:
 
 
 def save_reading(job_id: int, model: str, r: dict, usage: dict) -> None:
-    conn().execute("INSERT OR REPLACE INTO job_readings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                   (job_id, now(), model, r["ecuador_eligible"], r.get("eligibility_quote", ""), r["visa_sponsorship"],
-                    r.get("years_required"), r["level"], json.dumps(r.get("blockers") or []), r["match"], r["why"],
-                    usage.get("input_tokens", 0), usage.get("output_tokens", 0), usage.get("cost_usd", 0.0)))
+    conn().execute(
+        "INSERT OR REPLACE INTO job_readings (job_id, read_at, model, eligible, quote, visa, years, level, blockers, "
+        "match, why, is_posting, input_tokens, output_tokens, cost_usd) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (job_id, now(), model, r["ecuador_eligible"], r.get("eligibility_quote", ""), r["visa_sponsorship"],
+         r.get("years_required"), r["level"], json.dumps(r.get("blockers") or []), r["match"], r["why"],
+         int(r.get("is_job_posting", True)), usage.get("input_tokens", 0), usage.get("output_tokens", 0),
+         usage.get("cost_usd", 0.0)))
     conn().commit()
 
 
