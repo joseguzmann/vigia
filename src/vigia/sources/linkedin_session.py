@@ -23,7 +23,7 @@ import json
 import logging
 import random
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from vigia import db, vocab
@@ -37,7 +37,15 @@ CHECKPOINT_RE = re.compile(
     r"--login|restricted", re.I)
 AGE_RE = re.compile(r"\d+\s?(?:s|m|h|d|w|mo|y)(?:\s*•.*)?|Edited.*", re.I)
 log = logging.getLogger(__name__)
-POST_URL_RE = re.compile(r"/posts/[^\s\"]*?(?:activity|share)-(\d{17,20})")
+POST_URL_RE = re.compile(r"/posts/[^\s\"]*?(?:activity|share|ugcPost)-(\d{17,20})")
+
+
+def posted_from_id(post_id: str):
+    """LinkedIn post ids carry their creation time: the top bits are epoch milliseconds."""
+    try:
+        return datetime.fromtimestamp((int(post_id) >> 22) / 1000, timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
 
 
 def split_posts(text: str) -> list[dict]:
@@ -159,7 +167,7 @@ class LinkedInSession(Source):
                 source=self.name, source_id=pid or str(abs(hash(p["text"][:200]))),
                 title=p["text"].splitlines()[0][:160], company=p["author"],
                 url=url or f"https://www.linkedin.com/search/results/content/?keywords={q}",
-                location="", remote=None, posted_at=None, description=p["text"],
+                location="", remote=None, posted_at=posted_from_id(pid) if pid else None, description=p["text"],
                 tags=["post", f"query:{q}"],
             ))
         log.info("linkedin_session %r: %d posts, %d hiring", q, len(posts), len(out))

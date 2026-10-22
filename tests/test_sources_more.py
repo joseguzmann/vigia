@@ -578,3 +578,13 @@ def test_hot_pass_reads_only_boards_that_posted_lately(monkeypatch):
     assert not pipeline.hot_due("ashby")
     assert not pipeline.hot_due("ashby", datetime.now(timezone.utc) + timedelta(minutes=5))
     assert pipeline.hot_due("ashby", datetime.now(timezone.utc) + timedelta(minutes=21))
+
+
+def test_linkedin_session_reads_ugcpost_links_and_dates():
+    from vigia.sources import linkedin_session as ls
+    refs = [{"kind": "company", "url": "/company/acme/"},
+            {"kind": "feed_post", "url": "/posts/ai-architect-opportunity-ugcPost-7516839569812705281-3x-K"},
+            {"kind": "feed_post", "url": "/posts/ana_hiring-share-7516556867670667264-yDK_"},
+            {"kind": "feed_post", "url": "/feed/update/urn:li:ugcPost:7516839569812705281/"}]
+    assert [i for _, i in ls.post_urls(refs)] == ["7516839569812705281", "7516556867670667264"]
+    assert ls.posted_from_id("7516839569812705281").isoformat().startswith("2026-10-16T12:36")
