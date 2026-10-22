@@ -173,13 +173,20 @@ class Recruitee(_Boards):
         out = []
         for j in (data or {}).get("offers") or []:
             remote = bool(j.get("remote"))
-            place = j.get("location") or ", ".join(x for x in (j.get("city"), j.get("country")) if x)
+            # `locations` says where candidates may be ("India - Remote", note "Applicable to candidates
+            # based in India"); the flat `location` is often just "Remote job".
+            locs = j.get("locations") or []
+            names = [x.get("name") for x in locs if x.get("name")]
+            notes = [((x.get("translations") or {}).get("en") or {}).get("note") or x.get("note") for x in locs]
+            place = "; ".join(names) or j.get("location") or ", ".join(x for x in (j.get("city"), j.get("country")) if x)
+            text = strip_html(f"{j.get('description') or ''}\n{j.get('requirements') or ''}")
+            notes = [n for n in notes if n and n not in text]
             out.append(Job(
                 source=self.name, source_id=str(j.get("id", "")), title=j.get("title", ""),
                 company=j.get("company_name") or slug, url=j.get("careers_url", ""),
-                location=place + (" (Remote)" if remote else ""), remote=remote,
+                location=place + (" (Remote)" if remote and "remote" not in place.lower() else ""), remote=remote,
                 posted_at=parse_date((j.get("published_at") or j.get("created_at") or "").replace(" UTC", "+00:00")),
-                description=strip_html(f"{j.get('description') or ''}\n{j.get('requirements') or ''}"),
+                description=text + ("\n\nLocation: " + " ".join(notes) if notes else ""),
             ))
         return out
 

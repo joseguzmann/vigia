@@ -588,3 +588,15 @@ def test_linkedin_session_reads_ugcpost_links_and_dates():
             {"kind": "feed_post", "url": "/feed/update/urn:li:ugcPost:7516839569812705281/"}]
     assert [i for _, i in ls.post_urls(refs)] == ["7516839569812705281", "7516556867670667264"]
     assert ls.posted_from_id("7516839569812705281").isoformat().startswith("2026-10-16T12:36")
+
+
+def test_recruitee_uses_the_candidate_locations(monkeypatch, profile):
+    from vigia.flags import region
+    offer = {"id": 1, "title": "AI Engineer", "careers_url": "https://jobs.clanx.ai/o/ai-engineer-remote",
+             "location": "Remote job", "country": "India", "remote": True, "description": "<p>Remote team.</p>",
+             "locations": [{"name": "India - Remote", "country": "India",
+                            "translations": {"en": {"note": "Applicable to candidates based in India"}}}]}
+    monkeypatch.setattr(http, "get_json", lambda *a, **k: {"offers": [offer]})
+    job = ats_more.Recruitee({"boards": ["clanx"]}).fetch()[0]
+    assert job.location == "India - Remote" and "candidates based in India" in job.description
+    assert region(job, profile)[0] == "restricted"
