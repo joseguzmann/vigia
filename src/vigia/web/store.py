@@ -259,6 +259,7 @@ SOURCE_INFO = {
     "weworkremotely": ("We Work Remotely", "remote job board", "RSS"),
     "linkedin": ("LinkedIn jobs", "logged-out job search, slow and rotating", "public pages"),
     "linkedin_session": ("LinkedIn hiring posts (account)", "LinkedIn's post search with a dedicated account, a few times a day", "linkedin-mcp-server container"),
+    "openroles": ("openroles.today", "open nightly dataset of ATS postings; finds companies and reads postings Vigía cannot reach", "openroles.today data (CC BY-SA 4.0)"),
     "discover": ("Company discovery", "Google searches on ATS job pages; new boards with jobs in scope get watched", "Serper API"),
     "remoteyeah": ("RemoteYeah", "remote developer jobs, many open to Latin America", "listing pages + JSON-LD"),
     "linkedin_posts": ("LinkedIn hiring posts", "posts found through Serper (Google's index)", "Serper API + public pages"),

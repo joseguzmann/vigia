@@ -67,24 +67,17 @@ class Discover(Source):
         out = []
         checked = 0
         for (ats, slug), (q, example) in candidates.items():
-            known = {s.lower() for s in config.source(ats).get("boards", [])} | set(db.discovered_slugs(ats, None))
-            if slug in known:
+            if is_known(ats, slug):
                 continue
             if checked >= int(self.cfg.get("max_new_per_run", 40)):
                 break
             checked += 1
-            jobs = self.read_board(ats, slug)
-            keep = [j for j in jobs if flags.evaluate(j, config.profile())[0] in ("fit", "extra", "review")]
-            db.add_discovered(ats, slug, "watching" if keep else "rejected", q, example[:200], len(keep))
-            out += keep
+            out += check_board(ats, slug, q, example, reader=self.read_board)
         return out
 
     def read_board(self, ats: str, slug: str) -> list[Job]:
-        from vigia.sources import REGISTRY
-        try:
-            return REGISTRY[ats]({"boards": [slug], "include_discovered": False}).fetch()
-        except Exception:  # noqa: BLE001 — a broken board is just not watched
-            return []
+        return read_board(ats, slug)
+
 
     def search(self, key: str, q: str) -> list[dict]:
         started = datetime.now(timezone.utc)
@@ -98,3 +91,26 @@ class Discover(Source):
         db.log_request("serper", "discover", status,
                        int((datetime.now(timezone.utc) - started).total_seconds() * 1000))
         return data.get("organic", [])
+
+
+def read_board(ats: str, slug: str) -> list[Job]:
+    from vigia.sources import REGISTRY
+    try:
+        return REGISTRY[ats]({"boards": [slug], "include_discovered": False}).fetch()
+    except Exception:  # noqa: BLE001 — a broken board is just not watched
+        return []
+
+
+def is_known(ats: str, slug: str) -> bool:
+    known = {str(s).lower() for s in config.source(ats).get("boards", [])}
+    return slug.lower() in known or slug.lower() in set(db.discovered_slugs(ats, None))
+
+
+def check_board(ats: str, slug: str, origin: str, example: str = "", reader=read_board) -> list[Job]:
+    """Read a board once; watch it from now on only if a job passes the filters.
+    Returns the jobs that passed."""
+    jobs = reader(ats, slug)
+    keep = [j for j in jobs if flags.evaluate(j, config.profile())[0] in ("fit", "extra", "review")]
+    db.add_discovered(ats, slug.lower(), "watching" if keep else "rejected", origin,
+                      (example or (keep[0].title if keep else ""))[:200], len(keep))
+    return keep

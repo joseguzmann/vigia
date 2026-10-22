@@ -72,6 +72,7 @@ verdict, so the person only reads what survives.
 | `torre` | Torre: postings from its public sitemaps and pages, with the countries each accepts (its API is off-limits in robots.txt) | sitemaps + JSON-LD |
 | `strider` | LATAM-only marketplace; each role lists its accepted countries | job pages (schema.org) |
 | `linkedin` | LinkedIn's logged-out job search (optional, off by default) | public pages, rate-limited |
+| `openroles` | Companies and postings from the [openroles](https://openroles.today) dataset (54 ATS, nightly; data CC BY-SA 4.0 by datascry/openroles): new boards are checked once and watched if anything passes; postings on ATS without a Vigía source are read from their page | public data |
 | `discover` | Finds companies to watch: Google searches on ATS job pages (Ashby, Greenhouse, Lever, Workable, Teamtailor); boards with jobs in scope are added to their ATS source | Serper API key |
 | `remoteyeah` | RemoteYeah listing pages (Latin America, Python, FastAPI, LLMs, Django), job pages read for their JSON-LD | public pages |
 | `linkedin_posts` | LinkedIn **hiring posts**, found via Google's index (Serper), read logged-out | Serper API key + public pages |

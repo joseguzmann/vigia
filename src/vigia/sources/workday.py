@@ -44,7 +44,7 @@ class Workday(Source):
     def fetch(self) -> list[Job]:
         out: list[Job] = []
         profile = config.profile()
-        for board in self.cfg.get("boards", []):
+        for board in self.boards():
             try:
                 tenant, wd, site = board.split("/")
             except ValueError:

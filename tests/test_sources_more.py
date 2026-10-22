@@ -385,3 +385,17 @@ def test_linkedin_session_reads_group_posts_without_follow():
             "#WeAreHiring Senior AI Engineer, remote LATAM\n\n3 reactions\n")
     [p] = split_posts(text)
     assert p["author"] == "Michelle Landa" and p["text"].startswith("#WeAreHiring")
+
+
+def test_openroles_maps_rows_to_boards_and_keeps_open_remote_roles():
+    from vigia.sources.openroles import OpenRoles, board_of
+    assert board_of({"a": "ashby", "t": "Acme", "u": "https://jobs.ashbyhq.com/Acme/1"}) == ("ashby", "acme")
+    assert board_of({"a": "workday", "t": "x", "u": "https://acme.wd5.myworkdayjobs.com/en-US/Careers/job/Remote/AI_123"}) == ("workday", "acme/wd5/Careers")
+    assert board_of({"a": "bamboohr", "t": "acme", "u": "https://acme.bamboohr.com/careers/32"}) is None
+    src, prof = OpenRoles({}), {"title_include": ["AI Engineer"], "title_exclude": []}
+    row = {"ti": "AI Engineer", "w": "remote", "cc": None, "loc": "Remote", "l": None}
+    assert src.wanted(row, prof, "EC")
+    assert not src.wanted({**row, "cc": "US"}, prof, "EC")
+    assert src.wanted({**row, "cc": "CO", "loc": "LATAM | Colombia"}, prof, "EC")
+    assert not src.wanted({**row, "w": "onsite"}, prof, "EC")
+    assert not src.wanted({**row, "l": "senior"}, prof, "EC")

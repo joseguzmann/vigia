@@ -207,6 +207,15 @@ sources:
     phrases: [FastAPI, Python React, Django]
     templates:
       - '"hiring" AND {phrase} AND ("LATAM" OR "Latin America")'
+  openroles:
+    # openroles.today (data CC BY-SA 4.0): nightly dataset of postings on ~54 ATS. Used to find
+    # companies to watch (their boards are checked once, like discover) and to read postings on
+    # ATS Vigía has no source for. Reads only the files covering the last `days` days.
+    enabled: false
+    every_minutes: 1440
+    days: 2
+    max_new_boards: 60
+    max_pages: 40
   discover:
     # Finds companies to watch: Google (Serper) searches restricted to ATS job pages, e.g.
     # site:jobs.ashbyhq.com ("Latin America" OR LATAM) ("AI Engineer" OR LLM). Each new board is
