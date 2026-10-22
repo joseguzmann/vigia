@@ -53,6 +53,8 @@ class Workday(Source):
             try:
                 out += self.site(tenant, wd, site, profile)
             except Throttled:
+                if not out:  # nothing read: say so, so a single-board check isn't taken as "no jobs"
+                    raise
                 log.warning("workday: throttled at %s, stopping this run", tenant)
                 break
         return out

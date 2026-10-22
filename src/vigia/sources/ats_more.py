@@ -38,6 +38,8 @@ class _Boards(Source):
             try:
                 out += self.board(slug)
             except Throttled:
+                if not out:  # nothing read: say so, so a single-board check isn't taken as "no jobs"
+                    raise
                 log.warning("%s: throttled at %s, stopping this run", self.name, slug)
                 break
         return out

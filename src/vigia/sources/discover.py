@@ -72,7 +72,10 @@ class Discover(Source):
             if checked >= int(self.cfg.get("max_new_per_run", 40)):
                 break
             checked += 1
-            out += check_board(ats, slug, q, example, reader=self.read_board)
+            try:
+                out += check_board(ats, slug, q, example, reader=self.read_board)
+            except http.Throttled:
+                break  # unchecked boards stay unknown and come up again
         return out
 
     def read_board(self, ats: str, slug: str) -> list[Job]:
@@ -97,6 +100,8 @@ def read_board(ats: str, slug: str) -> list[Job]:
     from vigia.sources import REGISTRY
     try:
         return REGISTRY[ats]({"boards": [slug], "include_discovered": False}).fetch()
+    except http.Throttled:
+        raise  # not read: the caller stops and the board is checked again later
     except Exception:  # noqa: BLE001 — a broken board is just not watched
         return []
 

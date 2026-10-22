@@ -96,12 +96,18 @@ class OpenRoles(Source):
             if is_known(ats, slug):
                 continue
             budget -= 1
-            out += check_board(ats, slug, "openroles", title)
+            try:
+                out += check_board(ats, slug, "openroles", title)
+            except http.Throttled:
+                break  # unchecked boards stay unknown and come up again
 
         ids = {r["i"]: r for r in pages}
         known = db.known_source_ids(self.name, list(ids))
         for i, r in [(i, r) for i, r in ids.items() if i not in known][: int(self.cfg.get("max_pages", 40))]:
-            resp = http.get(self.name, "posting", r["u"])
+            try:
+                resp = http.get(self.name, "posting", r["u"])
+            except http.Throttled:
+                break  # keep what was found; the rest is read next run
             ld = job_posting_ld(resp.text) if resp is not None else None
             if not ld:
                 continue

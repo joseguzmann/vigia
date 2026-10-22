@@ -432,3 +432,45 @@ def test_openroles_stops_at_files_without_dates(monkeypatch):
     monkeypatch.setattr(openroles.http, "get_json", lambda *a, **k: manifest)
     monkeypatch.setattr(openroles.http, "get", lambda *a, **k: (_ for _ in ()).throw(AssertionError("fetched")))
     assert list(openroles.OpenRoles({}).rows()) == []
+
+
+def test_a_429_on_the_only_board_is_not_taken_as_no_jobs(monkeypatch):
+    def get(source, kind, url, **k):
+        raise http.Throttled("429")
+    monkeypatch.setattr(http, "get", get)
+    try:
+        ats_more.Teamtailor({"boards": ["only"]}).fetch()
+    except http.Throttled:
+        pass
+    else:
+        raise AssertionError("a board never read must not look empty")
+
+
+def test_a_throttled_board_is_left_unchecked(monkeypatch):
+    from vigia.sources import discover
+    added = []
+    monkeypatch.setattr(discover.db, "add_discovered", lambda *a: added.append(a))
+    def reader(ats, slug):
+        raise http.Throttled("429")
+    try:
+        discover.check_board("workday", "acme/wd1/jobs", "openroles", reader=reader)
+    except http.Throttled:
+        pass
+    assert added == []  # not "rejected": it is checked again later
+
+
+def test_openroles_keeps_what_it_found_when_pages_are_throttled(monkeypatch):
+    from vigia.sources import openroles
+    rows = [{"i": "a", "a": "ashby", "t": "good", "ti": "AI Engineer"},
+            {"i": "b", "a": "bamboohr", "t": "x", "ti": "AI Engineer", "u": "https://x/1"}]
+    src = openroles.OpenRoles({})
+    monkeypatch.setattr(src, "rows", lambda: iter(rows))
+    monkeypatch.setattr(src, "wanted", lambda r, p, h: True)
+    monkeypatch.setattr(openroles.config, "profile", lambda: {})
+    monkeypatch.setattr(openroles, "is_known", lambda ats, slug: False)
+    monkeypatch.setattr(openroles, "check_board", lambda *a, **k: ["job from board"])
+    monkeypatch.setattr(openroles.db, "known_source_ids", lambda s, ids: set())
+    def get(*a, **k):
+        raise http.Throttled("429")
+    monkeypatch.setattr(openroles.http, "get", get)
+    assert src.fetch() == ["job from board"]
