@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import random
 import re
 from datetime import datetime, timedelta
@@ -35,6 +36,7 @@ CHECKPOINT_RE = re.compile(
     r"sign in to continue|session (?:has )?expired|not (?:signed|logged) in|authentication (?:required|in progress)|"
     r"--login|restricted", re.I)
 AGE_RE = re.compile(r"\d+\s?(?:s|m|h|d|w|mo|y)(?:\s*•.*)?|Edited.*", re.I)
+log = logging.getLogger(__name__)
 POST_URL_RE = re.compile(r"/posts/[^\s\"]*?(?:activity|share)-(\d{17,20})")
 
 
@@ -139,6 +141,7 @@ class LinkedInSession(Source):
             data = {}
         text = (data.get("sections") or {}).get("search_results", "") if isinstance(data, dict) else ""
         if is_error or not text:
+            log.info("linkedin_session %r: no results (error=%s, %d chars)", q, is_error, len(raw or ""))
             if CHECKPOINT_RE.search(raw or ""):
                 reason = re.sub(r"\s+", " ", raw)[:200]
                 db.set_state(f"{self.name}.paused", f"{datetime.now(tz):%Y-%m-%d %H:%M} {reason}")
@@ -159,6 +162,7 @@ class LinkedInSession(Source):
                 location="", remote=None, posted_at=None, description=p["text"],
                 tags=["post", f"query:{q}"],
             ))
+        log.info("linkedin_session %r: %d posts, %d hiring", q, len(posts), len(out))
         return out
 
     async def call(self, q: str) -> tuple[str, bool]:
