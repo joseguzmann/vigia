@@ -95,6 +95,8 @@ Adding a source is one file: subclass `Source`, return `Job` objects, register i
 cp config/vigia.example.yaml config/vigia.yaml   # then edit your profile
 echo 'SERPER_API_KEY=...' > .env                    # only for linkedin_posts
 echo 'APIFY_TOKEN=...' >> .env                      # only for linkedin_posts_apify
+echo 'NTFY_URL=https://ntfy.example/vigia' >> .env   # optional: phone notification per new fit
+echo 'NTFY_TOKEN=...' >> .env                       # (ntfy access token allowed to publish)
 python -m venv .venv && .venv/bin/pip install -e ".[dev]"
 
 .venv/bin/vigia run          # run every enabled source once

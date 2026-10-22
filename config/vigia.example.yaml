@@ -309,3 +309,9 @@ sources:
     since: "2026-10-12"   # the first run reads from this day
     max_messages: 300     # per run; the rest waits for the next one
     max_postings: 40      # posting links opened per run
+
+# Phone notifications for new "fit" jobs through ntfy (NTFY_URL and NTFY_TOKEN in .env).
+notify:
+  quiet_hours: [22, 8]      # local time; nothing is sent in between
+  timezone: America/Guayaquil
+  max_per_run: 5            # the rest of a run's new fits go into one summary message

@@ -56,22 +56,23 @@ class OpenRoles(Source):
         # Unknown country or the home country; otherwise only a location open to the region.
         return row.get("cc") in (None, home) or bool(OPEN_LOC_RE.search(row.get("loc") or ""))
 
-    def rows(self) -> list[dict]:
+    def rows(self):
+        """Postings from the files covering the last `days` days, one file at a time."""
         manifest = http.get_json(self.name, "manifest", BASE + "manifest.json") or {}
         since = datetime.now(timezone.utc) - timedelta(days=float(self.cfg.get("days", 2)))
-        out = []
         for chunk in manifest.get("slim_index_chunks", []):
-            newest = datetime.fromisoformat(chunk["posted_max"].replace("Z", "+00:00"))
-            if newest < since and not self.cfg.get("all_chunks"):
-                break  # files are sorted newest first
+            newest = chunk.get("posted_max")
+            # Files are sorted newest first; the last ones may carry postings with no date.
+            if not self.cfg.get("all_chunks") and (
+                    not newest or datetime.fromisoformat(newest.replace("Z", "+00:00")) < since):
+                break
             resp = http.get(self.name, "chunk", BASE + chunk["file"])
             if resp is None:
                 continue
             try:
-                out += json.loads(gzip.decompress(resp.content))
+                yield from json.loads(gzip.decompress(resp.content))
             except (OSError, ValueError):
                 continue
-        return out
 
     def fetch(self) -> list[Job]:
         profile = config.profile()

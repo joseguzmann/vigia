@@ -399,3 +399,36 @@ def test_openroles_maps_rows_to_boards_and_keeps_open_remote_roles():
     assert src.wanted({**row, "cc": "CO", "loc": "LATAM | Colombia"}, prof, "EC")
     assert not src.wanted({**row, "w": "onsite"}, prof, "EC")
     assert not src.wanted({**row, "l": "senior"}, prof, "EC")
+
+
+def test_notify_caps_messages_and_respects_quiet_hours(monkeypatch):
+    from datetime import datetime
+    from vigia import notify
+    from vigia.models import Job
+    monkeypatch.setenv("NTFY_URL", "https://ntfy.example/vigia")
+    monkeypatch.setenv("NTFY_TOKEN", "t")
+    monkeypatch.setattr(notify.config, "load", lambda: {"notify": {"quiet_hours": [22, 8], "max_per_run": 2}})
+    sent = []
+    monkeypatch.setattr(notify, "send", lambda title, body, url="", tags="": sent.append(title) or True)
+    monkeypatch.setattr(notify, "quiet", lambda now=None: False)
+    jobs = [(Job(source="s", source_id=str(i), title=f"AI Engineer {i}", company="Acme", url="https://x"), i) for i in range(4)]
+    assert notify.new_fits("ashby", jobs) == 3
+    assert sent == ["New fit: AI Engineer 3", "New fit: AI Engineer 2", "+2 more new fits"]
+    monkeypatch.undo()
+    monkeypatch.setattr(notify.config, "load", lambda: {"notify": {"quiet_hours": [22, 8]}})
+    assert notify.quiet(datetime(2026, 10, 21, 23)) and notify.quiet(datetime(2026, 10, 22, 7))
+    assert not notify.quiet(datetime(2026, 10, 22, 9))
+
+
+def test_notify_needs_url_and_token(monkeypatch):
+    from vigia import notify
+    monkeypatch.delenv("NTFY_URL", raising=False)
+    assert notify.send("t", "b") is False
+
+
+def test_openroles_stops_at_files_without_dates(monkeypatch):
+    from vigia.sources import openroles
+    manifest = {"slim_index_chunks": [{"file": "a", "posted_max": None}]}
+    monkeypatch.setattr(openroles.http, "get_json", lambda *a, **k: manifest)
+    monkeypatch.setattr(openroles.http, "get", lambda *a, **k: (_ for _ in ()).throw(AssertionError("fetched")))
+    assert list(openroles.OpenRoles({}).rows()) == []

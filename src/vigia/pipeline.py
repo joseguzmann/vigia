@@ -8,7 +8,7 @@ import signal
 import time
 from datetime import datetime, timedelta, timezone
 
-from vigia import config, db, flags, http
+from vigia import config, db, flags, http, notify
 from vigia.linkedin_guest import Blocked
 from vigia.sources import REGISTRY
 
@@ -27,12 +27,16 @@ def run_source(name: str, src=None) -> dict:
         jobs = (src or REGISTRY[name](cfg)).fetch()
         fetched = len(jobs)
         profile = config.profile()
+        fits = []
         for job in jobs:
             if not job.title or not job.url:
                 continue
             verdict, score, f = flags.evaluate(job, profile)
             if db.upsert_job(job, verdict, score, f):
                 new += 1
+                if verdict == "fit":
+                    fits.append((job, score))
+        notify.new_fits(name, fits)
     except http.Throttled as e:
         error = f"throttled: {e}"
     except Blocked as e:
