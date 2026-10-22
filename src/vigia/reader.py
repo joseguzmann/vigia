@@ -176,9 +176,14 @@ def pending(limit: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def worth_notifying(reading: dict) -> bool:
+def worth_notifying(reading: dict, job: dict | None = None) -> bool:
     open_to_me = reading["ecuador_eligible"] != "no" or reading["visa_sponsorship"] == "yes"
-    return open_to_me and reading["match"] >= int(cfg().get("notify_min_match", 7))
+    good = open_to_me and reading["match"] >= int(cfg().get("notify_min_match", 7))
+    if not good or job is None:
+        return good
+    # A backlog read (reader just switched on, or catching up) is scored but not pushed.
+    seen = datetime.fromisoformat(job["first_seen"])
+    return datetime.now(timezone.utc) - seen <= timedelta(hours=float(cfg().get("notify_max_age_hours", 12)))
 
 
 def run() -> dict:
@@ -192,7 +197,7 @@ def run() -> dict:
             break
         db.save_reading(job["id"], model, reading, usage)
         read_n += 1
-        if worth_notifying(reading):
+        if worth_notifying(reading, job):
             good += 1
             if not notify.quiet():
                 notify.send(f"{reading['match']}/10 · {job['title'][:70]}",

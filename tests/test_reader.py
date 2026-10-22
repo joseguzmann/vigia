@@ -79,3 +79,14 @@ def test_new_jobs_puts_the_best_reading_first(monkeypatch):
     order = [t for t in ("Best Engineer", "Weak Engineer", "Unread Engineer", "Closed Engineer") if t in text]
     assert sorted(order, key=text.index) == ["Best Engineer", "Weak Engineer", "Unread Engineer", "Closed Engineer"]
     assert "**9/10** · open to you · Python and agents." in text
+
+
+def test_backlog_is_scored_but_not_pushed(monkeypatch):
+    sent = []
+    setup(monkeypatch, [{"provider": "claude-p", "model": "sonnet"}], sent)
+    old = store("Old Engineer")
+    db.conn().execute("UPDATE jobs SET first_seen = ? WHERE id = ?", ("2026-01-01T00:00:00+00:00", old))
+    monkeypatch.setattr(reader, "pending", lambda limit: [dict(db.conn().execute("SELECT * FROM jobs WHERE id = ?", (old,)).fetchone())])
+    monkeypatch.setattr(reader, "read_claude_p", lambda *a: (reading(9), {}))
+    assert reader.run() == {"read": 1, "notified": 0, "pending": 0}
+    assert sent == []

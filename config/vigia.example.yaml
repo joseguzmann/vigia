@@ -340,6 +340,7 @@ reader:
   per_run: 10
   max_age_days: 14
   notify_min_match: 7
+  notify_max_age_hours: 12   # older jobs (a backlog) are scored but not pushed
   alert_every_hours: 6
   api_budget_usd: 3          # per month, for the API readers
   candidate: "The candidate lives in <city, country>. They can work remotely, or on-site/hybrid in <city>; they would move abroad only with visa sponsorship."
