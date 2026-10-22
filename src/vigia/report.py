@@ -59,13 +59,15 @@ def new_jobs(since: str | None = None, include_out: bool = False, limit: int = 6
 
 
 def _reading_rank(rd) -> float:
-    """Read and open: 10 + match (11-20). Unread: 5. Read and closed to the candidate (no, and no
-    visa): match - 10 (below everything else)."""
+    """Open (yes, or a visa): 20 + match. Unread: 15. Eligibility unclear: 10 + match. Closed (no,
+    and no visa) or not a specific role: the match alone, below everything else."""
     if rd is None:
-        return 5
+        return 15
     closed = rd["eligible"] == "no" and rd["visa"] != "yes"
     not_a_role = rd["is_posting"] == 0  # a promotional post or a list of roles
-    return rd["match"] - 10 if closed or not_a_role else rd["match"] + 10
+    if closed or not_a_role:
+        return rd["match"]
+    return rd["match"] + (20 if rd["eligible"] == "yes" or rd["visa"] == "yes" else 10)
 
 
 def _freshness_rank(r) -> int:

@@ -27,16 +27,17 @@ def test_reads_pending_jobs_and_notifies_only_good_open_ones(monkeypatch):
     sent = []
     setup(monkeypatch, [{"provider": "claude-p", "model": "sonnet"}], sent)
     good, closed, weak = store("Backend Engineer"), store("Platform Engineer"), store("Data Engineer", "review")
-    promo = store("Hiring Roundup")
+    promo, unclear = store("Hiring Roundup"), store("Mexico Engineer")
     answers = {"Backend Engineer": reading(9), "Platform Engineer": reading(9, eligible="no"),
-               "Data Engineer": reading(5), "Hiring Roundup": reading(9, posting=False)}
+               "Data Engineer": reading(5), "Hiring Roundup": reading(9, posting=False),
+               "Mexico Engineer": reading(9, eligible="unclear")}
     seen = []
     def fake(system, user, model):
         seen.append((model, "CV for backend" in system, "Lives in Quito." in system))
         title = user.split("Title: ")[1].split("\n")[0]
         return answers[title], {"input_tokens": 10, "output_tokens": 5, "cost_usd": 0.0}
     monkeypatch.setattr(reader, "read_claude_p", fake)
-    assert reader.run() == {"read": 4, "notified": 1, "pending": 0}
+    assert reader.run() == {"read": 5, "notified": 1, "pending": 0}
     assert all(s == ("sonnet", True, True) for s in seen)
     assert sent == [("9/10 · Backend Engineer", "star")]
     assert set(db.readings([good, closed, weak, promo])) == {good, closed, weak, promo}
@@ -72,13 +73,15 @@ def test_api_budget_stops_the_fallback(monkeypatch):
 
 
 def test_new_jobs_puts_the_best_reading_first(monkeypatch):
-    weak, closed, best, unread = (store(t) for t in ("Weak Engineer", "Closed Engineer", "Best Engineer", "Unread Engineer"))
+    weak, closed, best, unread, unsure = (store(t) for t in ("Weak Engineer", "Closed Engineer", "Best Engineer",
+                                                             "Unread Engineer", "Unsure Engineer"))
     db.save_reading(weak, "m", reading(5), {})
+    db.save_reading(unsure, "m", reading(9, eligible="unclear"), {})
     db.save_reading(closed, "m", reading(10, eligible="no"), {})
     db.save_reading(best, "m", reading(9, why="Python and agents."), {})
     text = report.new_jobs(since="2000-01-01T00:00:00+00:00")
-    order = [t for t in ("Best Engineer", "Weak Engineer", "Unread Engineer", "Closed Engineer") if t in text]
-    assert sorted(order, key=text.index) == ["Best Engineer", "Weak Engineer", "Unread Engineer", "Closed Engineer"]
+    names = ["Best Engineer", "Weak Engineer", "Unsure Engineer", "Unread Engineer", "Closed Engineer"]
+    assert sorted(names, key=text.index) == names
     assert "**9/10** · open to you · Python and agents." in text
 
 

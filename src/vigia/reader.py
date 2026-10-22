@@ -183,7 +183,8 @@ def pending(limit: int) -> list[dict]:
 
 
 def worth_notifying(reading: dict, job: dict | None = None) -> bool:
-    open_to_me = reading["ecuador_eligible"] != "no" or reading["visa_sponsorship"] == "yes"
+    # Only a clear yes (or a visa) reaches the phone; "unclear" stays in new_jobs, below the clear ones.
+    open_to_me = reading["ecuador_eligible"] == "yes" or reading["visa_sponsorship"] == "yes"
     good = (open_to_me and reading.get("is_job_posting", True)
             and reading["match"] >= int(cfg().get("notify_min_match", 7)))
     if not good or job is None:
