@@ -600,3 +600,7 @@ def test_recruitee_uses_the_candidate_locations(monkeypatch, profile):
     job = ats_more.Recruitee({"boards": ["clanx"]}).fetch()[0]
     assert job.location == "India - Remote" and "candidates based in India" in job.description
     assert region(job, profile)[0] == "restricted"
+    hubs = dict(offer, location="Remote job", locations=[{"name": "Switzerland, Lugano"}, {"name": "UAE, Dubai"}])
+    monkeypatch.setattr(http, "get_json", lambda *a, **k: {"offers": [hubs]})
+    job = ats_more.Recruitee({"boards": ["acme"]}).fetch()[0]
+    assert job.location == "Remote job" and "Listed locations: Switzerland, Lugano; UAE, Dubai" in job.description

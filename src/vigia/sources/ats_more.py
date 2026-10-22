@@ -173,20 +173,25 @@ class Recruitee(_Boards):
         out = []
         for j in (data or {}).get("offers") or []:
             remote = bool(j.get("remote"))
-            # `locations` says where candidates may be ("India - Remote", note "Applicable to candidates
-            # based in India"); the flat `location` is often just "Remote job".
+            place = j.get("location") or ", ".join(x for x in (j.get("city"), j.get("country")) if x)
+            # `locations` lists places; often offices or hubs ("100% remote" roles list Lugano, Dubai...).
+            # Only a location with a note ("Applicable to candidates based in India") is a stated
+            # restriction and becomes the location; otherwise the list goes into the text for the reader.
             locs = j.get("locations") or []
             names = [x.get("name") for x in locs if x.get("name")]
-            notes = [((x.get("translations") or {}).get("en") or {}).get("note") or x.get("note") for x in locs]
-            place = "; ".join(names) or j.get("location") or ", ".join(x for x in (j.get("city"), j.get("country")) if x)
+            notes = [n for n in (((x.get("translations") or {}).get("en") or {}).get("note") or x.get("note")
+                                 for x in locs) if n]
             text = strip_html(f"{j.get('description') or ''}\n{j.get('requirements') or ''}")
-            notes = [n for n in notes if n and n not in text]
+            if notes and names:
+                place = "; ".join(names)
+            extra = ([f"Candidate location: {' '.join(dict.fromkeys(notes))}"] if notes else []) + \
+                    ([f"Listed locations: {'; '.join(names)}"] if names else [])
             out.append(Job(
                 source=self.name, source_id=str(j.get("id", "")), title=j.get("title", ""),
                 company=j.get("company_name") or slug, url=j.get("careers_url", ""),
                 location=place + (" (Remote)" if remote and "remote" not in place.lower() else ""), remote=remote,
                 posted_at=parse_date((j.get("published_at") or j.get("created_at") or "").replace(" UTC", "+00:00")),
-                description=text + ("\n\nLocation: " + " ".join(notes) if notes else ""),
+                description=text + ("\n\n" + "\n".join(extra) if extra else ""),
             ))
         return out
 
