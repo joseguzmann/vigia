@@ -93,12 +93,12 @@ class LinkedInSession(Source):
             gap = timedelta(minutes=int(self.cfg.get("min_gap_minutes", 90)))
             day0 = local.replace(hour=start, minute=0, second=0, microsecond=0)
             span = int((end - start) * 60)
-            for _ in range(200):  # draw until the times are far enough apart
-                cand = sorted(day0 + timedelta(minutes=random.randrange(span))
-                              for _ in range(int(self.cfg.get("per_day", 2))))
-                if all(b - a >= gap for a, b in zip(cand, cand[1:])):
-                    out = cand
-                    break
+            gap_min = int(gap.total_seconds() // 60)
+            # As many as fit with the gap; random times, then spread by the gap so none are closer.
+            n = min(int(self.cfg.get("per_day", 2)), span // max(gap_min, 1) + 1)
+            slack = span - (n - 1) * gap_min
+            offsets = sorted(random.randrange(max(slack, 1)) for _ in range(n))
+            out = [day0 + timedelta(minutes=o + i * gap_min) for i, o in enumerate(offsets)]
         db.set_state(key, json.dumps([s.isoformat() for s in out]))
         return out
 

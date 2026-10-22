@@ -377,6 +377,10 @@ def test_linkedin_session_paces_like_a_person(monkeypatch):
     assert src.slots(datetime(2026, 10, 24, 10, 0, tzinfo=tz)) == []  # Saturday
     state["linkedin_session.paused"] = "captcha"
     assert not src.due_at(slots[1])
+    many = ls.LinkedInSession({"per_day": 12, "hours_local": [9, 19], "min_gap_minutes": 40}).slots(
+        datetime(2026, 10, 22, 8, 0, tzinfo=tz))
+    assert len(many) == 12 and all(b - a >= ls.timedelta(minutes=40) for a, b in zip(many, many[1:]))
+    assert many[0].hour >= 9 and many[-1].hour < 19
 
 
 def test_linkedin_session_reads_group_posts_without_follow():
