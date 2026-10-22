@@ -331,6 +331,14 @@ notify:
   timezone: America/Guayaquil
   max_per_run: 5            # the rest of a run's new fits go into one summary message
 
+# Quick pass over the companies that posted something kept (fit, review, extra) in the last
+# `days`: read every `every_minutes` on top of each source's full run, so their new roles show
+# up within minutes instead of hours.
+hot_boards:
+  every_minutes: 20
+  days: 60
+  sources: [greenhouse, ashby, lever, workable, teamtailor, smartrecruiters, breezy, recruitee, bamboohr, rippling, manatal, workday]
+
 # An LLM reads each new fit/review/extra against the CV and scores it 1-10 (see src/vigia/reader.py).
 # new_jobs is ordered by it, and only good open roles notify the phone. CV files are plain text in
 # cv_dir (keep them out of git: secrets/ is mounted at /app/secrets).

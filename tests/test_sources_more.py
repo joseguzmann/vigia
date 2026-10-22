@@ -549,3 +549,32 @@ def test_rippling_and_manatal(monkeypatch):
     assert "Python" in r[0].description and r[0].posted_at.year == 2026
     m = ats_more.Manatal({"boards": ["agency"]}).fetch()
     assert [(j.title, j.url) for j in m] == [("AI Engineer", "https://www.careers-page.com/agency/job/H2")]
+
+
+def test_hot_pass_reads_only_boards_that_posted_lately(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from vigia import config, db, pipeline
+    from vigia.models import Job
+    from vigia.sources.base import board_key
+    assert board_key("Acme") == "acme" and board_key("acme/wd5/Careers") == "acme.wd5"
+    job = Job(source="ashby", source_id="1", title="AI Engineer", company="Hot", url="https://jobs.ashbyhq.com/hotco/1")
+    db.upsert_job(job, "fit", 5, {})
+    old = Job(source="ashby", source_id="2", title="Backend Engineer", company="Old", url="https://jobs.ashbyhq.com/oldco/2")
+    db.upsert_job(old, "fit", 5, {})
+    db.conn().execute("UPDATE jobs SET first_seen = '2026-01-01T00:00:00+00:00' WHERE source_id = '2'")
+    from vigia.sources import REGISTRY
+    src = REGISTRY["ashby"]({"boards": ["hotco", "oldco", "quietco"], "include_discovered": False, "hot_only": True})
+    assert src.boards() == ["hotco"]
+
+    cfg = dict(config.load()); cfg["hot_boards"] = {"sources": ["ashby"], "every_minutes": 20}
+    monkeypatch.setattr(config, "load", lambda: cfg)
+    monkeypatch.setattr(config, "source", lambda n: {"enabled": True, "boards": ["hotco"]})
+    assert pipeline.hot_due("ashby") and not pipeline.hot_due("lever")
+    ran = []
+    monkeypatch.setattr(pipeline, "run_source", lambda name, src=None: ran.append((name, src.cfg["hot_only"])) or {})
+    pipeline.run_hot("ashby")
+    assert ran == [("ashby:hot", True)]
+    db.start_run("ashby:hot")
+    assert not pipeline.hot_due("ashby")
+    assert not pipeline.hot_due("ashby", datetime.now(timezone.utc) + timedelta(minutes=5))
+    assert pipeline.hot_due("ashby", datetime.now(timezone.utc) + timedelta(minutes=21))

@@ -78,6 +78,26 @@ def reflag() -> dict:
     return {"jobs": len(rows), "changed": changed, "merged_duplicates": merged}
 
 
+def hot_due(name: str, now: datetime | None = None) -> bool:
+    """The quick pass over an ATS source's hot boards (config `hot_boards`), on its own clock."""
+    hot = config.load().get("hot_boards", {})
+    if name not in hot.get("sources", []) or not config.source(name).get("enabled"):
+        return False
+    last = db.last_run(f"{name}:hot")
+    if last is None:
+        return True
+    started = datetime.fromisoformat(last["started_at"])
+    return (now or datetime.now(timezone.utc)) - started >= timedelta(minutes=int(hot.get("every_minutes", 20)))
+
+
+def run_hot(name: str) -> dict:
+    """Read only the boards that posted something kept lately; recorded as "<name>:hot" so the
+    full run keeps its own schedule."""
+    hot = config.load().get("hot_boards", {})
+    src = REGISTRY[name]({**config.source(name), "hot_only": True, "hot_days": hot.get("days", 60)})
+    return run_source(f"{name}:hot", src)
+
+
 def enabled_sources() -> list[str]:
     return [n for n in REGISTRY if config.source(n).get("enabled")]
 
@@ -117,6 +137,8 @@ def serve() -> None:
                 break
             if due(name):
                 run_source(name)
+            elif hot_due(name):
+                run_hot(name)
             if reader.due() and not stop["now"]:
                 db.set_state("reader.last_run", db.now())
                 try:

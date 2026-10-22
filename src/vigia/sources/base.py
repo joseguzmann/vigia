@@ -24,10 +24,22 @@ class Source:
         raise NotImplementedError
 
     def boards(self) -> list[str]:
-        """Company boards for an ATS source: the config's, plus the ones `discover` found."""
+        """Company boards for an ATS source: the config's, plus the ones `discover` found.
+        With `hot_only`, just the boards that posted something kept (fit, review, extra) lately."""
         from vigia import db
         found = db.discovered_slugs(self.name) if self.cfg.get("include_discovered", True) else []
-        return list(dict.fromkeys([*self.cfg.get("boards", []), *found]))
+        boards = list(dict.fromkeys([*self.cfg.get("boards", []), *found]))
+        if self.cfg.get("hot_only"):
+            urls = db.kept_urls(self.name, int(self.cfg.get("hot_days", 60)))
+            boards = [b for b in boards if board_key(b) in urls]
+        return boards
+
+
+def board_key(board: str) -> str:
+    """The part of a board id that appears in its jobs' URLs: the slug, or for Workday
+    ("tenant/wd5/Site") the host prefix "tenant.wd5"."""
+    parts = str(board).lower().split("/")
+    return f"{parts[0]}.{parts[1]}" if len(parts) == 3 else parts[0]
 
 
 def strip_html(text: str | None) -> str:

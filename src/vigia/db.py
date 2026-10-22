@@ -263,6 +263,16 @@ def discovered_board(ats: str, slug: str):
     return conn().execute("SELECT * FROM discovered_boards WHERE ats = ? AND slug = ?", (ats, slug.lower())).fetchone()
 
 
+def kept_urls(source: str, days: int) -> str:
+    """Lowercased URLs of the jobs this source brought that were kept (fit, review, extra) in the
+    last `days`, joined: `board_key(b) in kept_urls(...)` says whether board b posted lately."""
+    since = datetime.now(timezone.utc).timestamp() - days * 86400
+    since_iso = datetime.fromtimestamp(since, timezone.utc).isoformat(timespec="seconds")
+    rows = conn().execute("SELECT url FROM jobs WHERE source = ? AND verdict IN ('fit', 'review', 'extra') "
+                          "AND first_seen >= ?", (source, since_iso))
+    return "\n".join((r["url"] or "").lower() for r in rows)
+
+
 def save_reading(job_id: int, model: str, r: dict, usage: dict) -> None:
     conn().execute("INSERT OR REPLACE INTO job_readings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                    (job_id, now(), model, r["ecuador_eligible"], r.get("eligibility_quote", ""), r["visa_sponsorship"],

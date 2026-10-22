@@ -147,6 +147,14 @@ The container runs `vigia serve`: a loop that runs each enabled source when its
 | `vigia app stats` / `vigia app export` | the experiment as JSON / every application as Markdown |
 | `vigia app import FILE.json` | bulk load from an older log |
 
+## Fresh roles first
+
+Discovery (openroles, job-board-aggregator, `discover`) runs about daily and only decides which
+companies to watch. Watching is faster: each ATS source reads all its boards every few hours, and
+the boards that posted something kept in the last `hot_boards.days` get an extra pass every
+`hot_boards.every_minutes`. A new role then goes through the rules and the job reader within
+minutes, and a good open one reaches the phone.
+
 ## Job reader (LLM ranking)
 
 The rules decide what is in or out; an LLM then reads each new fit, review and extra against the
