@@ -205,8 +205,23 @@ def worth_notifying(reading: dict, job: dict | None = None) -> bool:
         if posted.tzinfo is None:
             posted = posted.replace(tzinfo=timezone.utc)
         return now - posted <= timedelta(days=float(cfg().get("notify_max_posted_days", 3)))
+    if job["source"] == "manatal" and not manatal_recent(job["source_id"]):
+        return False
     return not db.board_added_recently(job["source"], job["url"], seen,
                                        timedelta(hours=float(cfg().get("new_board_grace_hours", 36))))
+
+
+def manatal_recent(source_id: str) -> bool:
+    """Manatal publishes no dates, but its job ids are global and grow over time: an id far
+    below the newest one Vigía has seen is an old (often evergreen "talent pool") posting."""
+    try:
+        job_id = int(str(source_id).rsplit("/", 1)[1])
+    except (IndexError, ValueError):
+        return True
+    newest = db.conn().execute(
+        "SELECT MAX(CAST(substr(source_id, instr(source_id, '/') + 1) AS INTEGER)) FROM jobs WHERE source = 'manatal'"
+    ).fetchone()[0] or job_id
+    return job_id >= newest - int(cfg().get("manatal_recent_ids", 100000))
 
 
 def run() -> dict:

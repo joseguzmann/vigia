@@ -132,3 +132,18 @@ def test_jobs_from_a_just_added_board_or_old_postings_do_not_push(monkeypatch):
     assert reader.worth_notifying(reading(9), job("oldco"))           # watched for days: a real new posting
     assert not reader.worth_notifying(reading(9), job("dated", now - timedelta(days=10)))  # old posting
     assert reader.worth_notifying(reading(9), job("fresh", now - timedelta(hours=5)))
+
+
+def test_old_manatal_ids_do_not_push(monkeypatch):
+    sent = []
+    setup(monkeypatch, [{"provider": "claude-p", "model": "sonnet"}], sent)
+    db.add_discovered("manatal", "agency", "watching", "openroles-tenants", "", 1)
+    db.conn().execute("UPDATE discovered_boards SET found_at = '2026-01-01T00:00:00+00:00'")
+    def job(job_id):
+        j = Job(source="manatal", source_id=f"agency/{job_id}", title=f"Engineer {job_id}", company="agency",
+                url=f"https://www.careers-page.com/agency/job/H{job_id}", description="Python. " * 50)
+        db.upsert_job(j, "fit", 5, {"category": "backend"})
+        return dict(db.conn().execute("SELECT * FROM jobs WHERE source_id = ?", (f"agency/{job_id}",)).fetchone())
+    newest, recent, evergreen = job(4514070), job(4490060), job(311250)
+    assert reader.worth_notifying(reading(9), newest) and reader.worth_notifying(reading(9), recent)
+    assert not reader.worth_notifying(reading(9), evergreen)
