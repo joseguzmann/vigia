@@ -5,6 +5,12 @@ really hires, years, hard requirements the CV lacks) and gives a 1-10 match with
 why. The answer is stored in `job_readings` and is what orders `new_jobs` and what triggers a
 phone notification (eligible, or abroad with a visa, and a match at or above `notify_min_match`).
 
+What it reads is the stored listing plus the job's page fetched at read time (its schema.org
+JobPosting and visible text): boards and aggregators often shorten the listing to "Worldwide" or
+"Remote" while the page says where the company really hires. What the page adds against the
+listing comes back as `warnings`. LinkedIn posts are read even when the rules filtered them out:
+the rules misread posts, and a post the reader finds open and good goes back into `new_jobs`.
+
 Readers, in order (config `reader.readers`), each one of:
   - claude-p:  the Claude Code CLI in print mode (`claude -p`), on the subscription it is logged
                in with (CLAUDE_CODE_OAUTH_TOKEN). No tools, no MCP servers, no settings: the
@@ -19,19 +25,20 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from vigia import config, db, notify
+from vigia import config, db, http, notify
 
 log = logging.getLogger("vigia")
 
 SCHEMA = {
     "type": "object", "additionalProperties": False,
     "required": ["is_job_posting", "ecuador_eligible", "eligibility_quote", "visa_sponsorship", "years_required",
-                 "level", "blockers", "match", "why"],
+                 "level", "blockers", "match", "why", "warnings"],
     "properties": {
         "is_job_posting": {"type": "boolean",
                            "description": "True if the text offers one specific open role (one employer or one client, "
@@ -54,9 +61,14 @@ SCHEMA = {
         "match": {"type": "integer", "minimum": 1, "maximum": 10,
                   "description": "How well the candidate fits what the role needs, 1-10, ignoring location"},
         "why": {"type": "string", "description": "One sentence"},
+        "warnings": {"type": "array", "items": {"type": "string"},
+                     "description": "Where the full page contradicts or narrows the listing: the country or region "
+                                    "the company really hires in, the posting is closed or expired, a different "
+                                    "company or role, a staffing agency reposting. Short phrases; [] if none."},
     },
 }
-SYSTEM = ("You screen job postings for one candidate. Be literal: use only what the posting says. {candidate}"
+SYSTEM = ("You screen job postings for one candidate. Be literal: use only what the posting says. When the full "
+          "page disagrees with the listing (location, remote policy, status), the page wins. {candidate}"
           "\n\nCandidate CV:\n{cv}")
 FAMILY_OF = {"ai": "ai", "backend": "backend"}  # flags category -> CV file key; anything else: fullstack
 
@@ -72,12 +84,53 @@ def cv_for(category: str | None) -> str:
     return (Path(c.get("cv_dir", "/app/secrets/cv")) / name).read_text() if name else ""
 
 
-def messages(job: dict) -> tuple[str, str]:
+def messages(job: dict, page: str = "") -> tuple[str, str]:
     category = json.loads(job.get("flags") or "{}").get("category")
     system = SYSTEM.format(candidate=cfg().get("candidate", ""), cv=cv_for(category))
     user = (f"Job posting\nTitle: {job['title']}\nCompany: {job['company']}\nLocation field: {job.get('location') or ''}\n"
             f"Salary: {job.get('salary') or ''}\n\n{(job.get('description') or '')[:12000]}")
+    if page:
+        user += f"\n\n--- Full page, fetched now from {job['url']} ---\n{page}"
     return system, user
+
+
+# LinkedIn: the stored text is already the whole post or job, and extra requests from this IP
+# would count against the guest sources' rate limit.
+PAGE_SKIP = ("linkedin.com/",)
+
+
+def page_text(url: str) -> str:
+    """The job's own page: its schema.org JobPosting (location, remote policy, dates) and the
+    visible text, trimmed. '' when it can't be fetched; the listing is read alone then."""
+    if not url or any(s in url for s in PAGE_SKIP) or not cfg().get("read_page", True):
+        return ""
+    from bs4 import BeautifulSoup
+    try:
+        resp = http.get("reader", "page", url, keep_errors=True)
+    except http.Throttled:
+        return ""
+    if resp is not None and resp.status_code in (404, 410):
+        return f"(The job page answered HTTP {resp.status_code}: the posting has probably been taken down.)"
+    if resp is None or resp.status_code >= 300 or "html" not in resp.headers.get("Content-Type", "html"):
+        return ""
+    soup = BeautifulSoup(resp.text, "html.parser")
+    facts = []
+    for tag in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(tag.string or "")
+        except ValueError:
+            continue
+        for node in data if isinstance(data, list) else data.get("@graph", [data]) if isinstance(data, dict) else []:
+            if isinstance(node, dict) and node.get("@type") == "JobPosting":
+                keep = {k: node[k] for k in ("title", "datePosted", "validThrough", "employmentType", "jobLocationType",
+                                             "jobLocation", "applicantLocationRequirements", "hiringOrganization")
+                        if node.get(k)}
+                facts.append(json.dumps(keep, ensure_ascii=False)[:3000])
+    for tag in soup(["script", "style", "noscript", "svg", "nav", "footer"]):
+        tag.decompose()
+    text = re.sub(r"\n\s*\n+", "\n", soup.get_text("\n")).strip()
+    limit = int(cfg().get("page_chars", 12000))
+    return (("Structured data (JobPosting): " + " ".join(facts) + "\n\n") if facts else "") + text[:limit]
 
 
 # --- readers -------------------------------------------------------------------------
@@ -132,7 +185,12 @@ def read_api(provider: str, system: str, user: str, model: str, price: list | No
 
 def read(job: dict) -> tuple[dict, dict, str]:
     """Try each configured reader in order. Returns (reading, usage, 'provider:model')."""
-    system, user = messages(job)
+    try:
+        page = page_text(job["url"])
+    except Exception as e:  # noqa: BLE001 — a broken page must not stop the reading
+        log.info("reader: page %s not read: %s", job["url"], e)
+        page = ""
+    system, user = messages(job, page)
     errors = []
     for i, r in enumerate(cfg().get("readers") or [{"provider": "claude-p", "model": "sonnet"}]):
         name = f"{r['provider']}:{r['model']}"
@@ -172,16 +230,21 @@ def api_spent_this_month() -> float:
 
 # --- the loop --------------------------------------------------------------------------
 
+POST_SOURCES = ("linkedin_posts", "linkedin_posts_apify", "linkedin_session")
+
+
 def pending(limit: int) -> list[dict]:
-    """Jobs worth reading that have no reading yet: fits, then reviews, then extras; newest first."""
+    """Jobs worth reading that have no reading yet: fits, then reviews, then extras, then LinkedIn
+    posts the rules filtered out; newest first."""
     days = int(cfg().get("max_age_days", 14))
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
     rows = db.conn().execute(
         """SELECT j.* FROM jobs j LEFT JOIN job_readings r ON r.job_id = j.id
-           WHERE r.job_id IS NULL AND j.verdict IN ('fit', 'review', 'extra') AND j.first_seen >= ?
-           AND length(coalesce(j.description, '')) >= 200
-           ORDER BY CASE j.verdict WHEN 'fit' THEN 0 WHEN 'review' THEN 1 ELSE 2 END, j.first_seen DESC
-           LIMIT ?""", (since, limit)).fetchall()
+           WHERE r.job_id IS NULL AND j.first_seen >= ? AND length(coalesce(j.description, '')) >= 200
+           AND (j.verdict IN ('fit', 'review', 'extra') OR j.source IN (?, ?, ?))
+           ORDER BY CASE j.verdict WHEN 'fit' THEN 0 WHEN 'review' THEN 1 WHEN 'extra' THEN 2 ELSE 3 END,
+                    j.first_seen DESC
+           LIMIT ?""", (since, *POST_SOURCES, limit)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -224,8 +287,38 @@ def manatal_recent(source_id: str) -> bool:
     return job_id >= newest - int(cfg().get("manatal_recent_ids", 100000))
 
 
+def push(job: dict, reading: dict) -> None:
+    warn = reading.get("warnings") or []
+    notify.send(f"{reading['match']}/10 · {job['title'][:70]}",
+                f"{job['company']} · {job.get('location') or 'location n/a'}\n{reading['why'][:300]}"
+                + (f"\n⚠ {'; '.join(warn)[:200]}" if warn else ""),
+                job["url"], tags="star")
+
+
+def flush_held() -> int:
+    """Send what was found during quiet hours, once they are over."""
+    held = json.loads(db.get_state("reader.held", "[]"))
+    if not held or notify.quiet():
+        return 0
+    rows = db.readings(held)
+    for job_id in held:
+        job = db.conn().execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        if job is not None and job_id in rows:
+            r = rows[job_id]
+            push(dict(job), {"match": r["match"], "why": r["why"], "warnings": json.loads(r["warnings"] or "[]")})
+    db.set_state("reader.held", "[]")
+    return len(held)
+
+
+def hold(job_id: int) -> None:
+    held = json.loads(db.get_state("reader.held", "[]"))
+    db.set_state("reader.held", json.dumps(held + [job_id]))
+
+
 def run() -> dict:
-    """Read up to `per_run` pending jobs; notify the good ones. Returns a summary."""
+    """Read up to `per_run` pending jobs; notify the good ones (held during quiet hours and sent
+    when they end). Returns a summary."""
+    flush_held()
     jobs = pending(int(cfg().get("per_run", 10)))
     read_n = good = 0
     for job in jobs:
@@ -237,10 +330,10 @@ def run() -> dict:
         read_n += 1
         if worth_notifying(reading, job):
             good += 1
-            if not notify.quiet():
-                notify.send(f"{reading['match']}/10 · {job['title'][:70]}",
-                            f"{job['company']} · {job.get('location') or 'location n/a'}\n{reading['why'][:300]}",
-                            job["url"], tags="star")
+            if notify.quiet():
+                hold(job["id"])
+            else:
+                push(job, reading)
     return {"read": read_n, "notified": good, "pending": len(jobs) - read_n}
 
 

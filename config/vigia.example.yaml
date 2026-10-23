@@ -349,6 +349,8 @@ reader:
   max_age_days: 14
   notify_min_match: 7
   notify_max_age_hours: 12   # older jobs (a backlog) are scored but not pushed
+  read_page: true           # also fetch the job's page (JSON-LD + text); its contradictions come back as warnings
+  page_chars: 12000
   notify_max_posted_days: 3  # a posting older than this is not news
   new_board_grace_hours: 36  # undated jobs from a board added this recently came with it: no push
   manatal_recent_ids: 100000  # Manatal has no dates: ids this far below the newest are old postings

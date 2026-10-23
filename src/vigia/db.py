@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS job_readings (
     match         INTEGER,
     why           TEXT,
     is_posting    INTEGER,
+    warnings      TEXT,
     input_tokens  INTEGER,
     output_tokens INTEGER,
     cost_usd      REAL
@@ -127,6 +128,8 @@ def conn() -> sqlite3.Connection:
         cols = {r["name"] for r in _conn.execute("PRAGMA table_info(job_readings)")}
         if "is_posting" not in cols:  # added 2026-10-22
             _conn.execute("ALTER TABLE job_readings ADD COLUMN is_posting INTEGER")
+        if "warnings" not in cols:  # added 2026-10-23: what the full page says against the listing
+            _conn.execute("ALTER TABLE job_readings ADD COLUMN warnings TEXT")
     return _conn
 
 
@@ -292,10 +295,10 @@ def board_added_recently(source: str, url: str, seen: datetime, window) -> bool:
 def save_reading(job_id: int, model: str, r: dict, usage: dict) -> None:
     conn().execute(
         "INSERT OR REPLACE INTO job_readings (job_id, read_at, model, eligible, quote, visa, years, level, blockers, "
-        "match, why, is_posting, input_tokens, output_tokens, cost_usd) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "match, why, is_posting, warnings, input_tokens, output_tokens, cost_usd) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (job_id, now(), model, r["ecuador_eligible"], r.get("eligibility_quote", ""), r["visa_sponsorship"],
          r.get("years_required"), r["level"], json.dumps(r.get("blockers") or []), r["match"], r["why"],
-         int(r.get("is_job_posting", True)), usage.get("input_tokens", 0), usage.get("output_tokens", 0),
+         int(r.get("is_job_posting", True)), json.dumps(r.get("warnings") or []), usage.get("input_tokens", 0), usage.get("output_tokens", 0),
          usage.get("cost_usd", 0.0)))
     conn().commit()
 

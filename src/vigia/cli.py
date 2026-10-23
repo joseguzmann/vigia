@@ -41,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     rep.add_argument("--since", help="ISO timestamp (default: last review)")
     rep.add_argument("--all", action="store_true", help="also list filtered-out jobs")
     rep.add_argument("--limit", type=int, default=60)
+    rep.add_argument("--queue", choices=["direct", "ats"], default="", help="only one queue (default both)")
     rep.add_argument("--mark", action="store_true", help="mark everything up to now as reviewed")
 
     h = sub.add_parser("health", help="status of each source")
@@ -93,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         for n in names:
             pipeline.run_source(n)
     elif a.cmd == "report":
-        print(report.new_jobs(since=a.since, include_out=a.all, limit=a.limit))
+        print(report.new_jobs(since=a.since, include_out=a.all, limit=a.limit, queue=a.queue))
         if a.mark:
             report.mark_reviewed()
     elif a.cmd == "health":

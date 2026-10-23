@@ -76,12 +76,14 @@ def health() -> str:
 
 
 @tool
-def new_jobs(since: str | None = None, limit: int = 40, include_out: bool = False) -> str:
-    """Jobs first seen since the last review (or since an ISO timestamp), freshest first,
-    grouped by verdict. Each one shows its job id and whether it was already applied to.
+def new_jobs(since: str | None = None, limit: int = 40, include_out: bool = False, queue: str = "") -> str:
+    """Jobs first seen since the last review (or since an ISO timestamp), best reading first,
+    in two queues: "direct" (LinkedIn, posts, job boards, email alerts) and "ats" (company
+    career pages). queue="" shows both, each with up to `limit` per verdict. Each job shows its
+    id and whether it was already applied to.
     Does not move the review point: call mark_reviewed after going through them."""
     _c()
-    return report.new_jobs(since=since, include_out=include_out, limit=limit)
+    return report.new_jobs(since=since, include_out=include_out, limit=limit, queue=queue)
 
 
 @tool

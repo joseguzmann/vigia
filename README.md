@@ -161,7 +161,17 @@ The rules decide what is in or out; an LLM then reads each new fit, review and e
 CV of its family (ai, backend, fullstack) and answers, as structured output: can the candidate be
 hired from where they live (with the sentence that decides it), visa sponsorship, years asked,
 level, hard requirements the CV lacks, and a 1–10 match with one line of why. `new_jobs` is
-ordered by it, and only open roles at or above `notify_min_match` reach the phone.
+ordered by it, and only open roles at or above `notify_min_match` reach the phone; what is found
+during quiet hours is held and sent when they end.
+
+Besides the stored listing, the reader gets the job's page fetched at read time (its schema.org
+`JobPosting` and visible text; not LinkedIn, whose stored text is already complete). Boards often
+shorten the location to "Worldwide" or "Remote"; when the page says otherwise, or answers 404/410,
+the reading carries a `warnings` line. LinkedIn posts are read even when the rules filtered them
+out, and one the reader finds open and good comes back as "worth a look".
+
+`new_jobs` comes in two queues, each ranked on its own: LinkedIn, posts and job boards first,
+company career pages (ATS) second, so a company load's hundreds of roles can't bury the few posts.
 
 Readers are tried in order (`reader.readers`):
 

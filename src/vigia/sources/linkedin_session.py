@@ -48,6 +48,26 @@ def posted_from_id(post_id: str):
         return None
 
 
+BUTTONS = {"follow", "join", "connect", "message", "promoted", "visit my website", "book an appointment"}
+DEGREE_RE = re.compile(r"\s*•\s*(?:1st|2nd|3rd\+?|Following|Author)\b.*$", re.I)
+
+
+def post_author(head: list[str]) -> str:
+    """The author from a post header: the name before "• 2nd" when there is one, else the first
+    line that is not the age ("3d •"), a button ("Join") or a degree alone."""
+    for i, ln in enumerate(head):
+        if DEGREE_RE.search(ln):
+            name = DEGREE_RE.sub("", ln).strip()
+            if name:
+                return name
+            if i and not AGE_RE.fullmatch(head[i - 1]) and head[i - 1].lower() not in BUTTONS:
+                return head[i - 1]
+    for ln in head:
+        if not AGE_RE.fullmatch(ln) and ln.lower() not in BUTTONS and not ln.startswith("•"):
+            return ln
+    return "LinkedIn post"
+
+
 def split_posts(text: str) -> list[dict]:
     """The tool's search_results text, one block per post: author and body."""
     out = []
@@ -60,8 +80,7 @@ def split_posts(text: str) -> list[dict]:
         # Without a Follow button (a connection, a group post) the body starts after the age.
         head_end = lines.index("Follow") if "Follow" in lines else next(
             (i for i, ln in enumerate(lines[:8]) if AGE_RE.fullmatch(ln)), 0)
-        degree = next((ln for ln in lines[:head_end] if "•" in ln), None)
-        author = re.sub(r"\s*•.*$", "", degree).strip() if degree and not degree.startswith("•") else lines[0]
+        author = post_author(lines[:head_end] if head_end else lines[:1])
         body = lines[head_end + 1:] if head_end else lines[1:]
         # The tail is reaction counts and boilerplate.
         while body and (re.fullmatch(r"[\d\s​]*(reactions?|comments?|reposts?)?", body[-1], re.I)

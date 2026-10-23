@@ -12,6 +12,28 @@ from vigia.sources import REGISTRY
 VERDICT_TITLES = {"fit": "Worth applying", "extra": "Extra: abroad with visa/relocation",
                   "review": "Worth a look", "out": "Filtered out"}
 
+# Two queues, so the hundreds of jobs a company load brings in can't bury the few LinkedIn posts
+# and board listings: company career pages (an ATS read directly) on one side, everything else
+# (LinkedIn, posts, job boards, email alerts) on the other. A job also seen outside an ATS is "direct".
+ATS = {"greenhouse", "ashby", "lever", "workday", "teamtailor", "workable", "smartrecruiters", "breezy",
+       "recruitee", "bamboohr", "rippling", "manatal"}
+QUEUES = {"direct": "Queue 1 — LinkedIn, posts and job boards", "ats": "Queue 2 — company career pages (ATS)"}
+POST_SOURCES = ("linkedin_posts", "linkedin_posts_apify", "linkedin_session")
+
+
+def channel(r) -> str:
+    seen = {s["source"].split(":")[0] for s in json.loads(r["seen_in"] or "[]")} or {r["source"]}
+    return "ats" if seen <= ATS else "direct"
+
+
+def _verdict(r, reading) -> str:
+    """A LinkedIn post the rules filtered out comes back as "worth a look" when the reader finds it
+    a real, open role that fits: the rules misread posts more than listings."""
+    if (r["verdict"] == "out" and r["source"] in POST_SOURCES and reading is not None and reading["is_posting"] != 0
+            and reading["eligible"] != "no" and reading["match"] >= 6):
+        return "review"
+    return r["verdict"]
+
 
 def last_review() -> str:
     default = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(timespec="seconds")
@@ -22,28 +44,37 @@ def mark_reviewed() -> None:
     db.set_state("review.last", db.now())
 
 
-def new_jobs(since: str | None = None, include_out: bool = False, limit: int = 60) -> str:
+def new_jobs(since: str | None = None, include_out: bool = False, limit: int = 60, queue: str = "") -> str:
+    """Both queues (or one: queue="direct" or "ats"), each with its own `limit` per verdict."""
     since = since or last_review()
     rows = db.jobs_since(since)
+    read = db.readings([r["id"] for r in rows if r["verdict"] != "out" or r["source"] in POST_SOURCES])
     groups = defaultdict(list)
     for r in rows:
-        groups[r["verdict"]].append(r)
+        groups[(channel(r), _verdict(r, read.get(r["id"])))].append(r)
 
-    lines = [f"# Vigía — new since {_local(since)}", "",
-             f"{len(rows)} new jobs: " + ", ".join(
-                 f"{len(groups[v])} {VERDICT_TITLES[v].lower()}" for v in ("fit", "extra", "review", "out")), ""]
+    lines = [f"# Vigía — new since {_local(since)}", ""]
+    for q, title in QUEUES.items():
+        n = {v: len(groups[(q, v)]) for v in ("fit", "extra", "review", "out")}
+        lines.append(f"{title}: " + ", ".join(f"{n[v]} {VERDICT_TITLES[v].lower()}" for v in n))
+    lines.append("")
     applied = {r["job_id"]: r["number"] for r in db.conn().execute(
         "SELECT job_id, number FROM applications WHERE job_id IS NOT NULL")}
-    read = db.readings([r["id"] for r in rows if r["verdict"] != "out"])
-    for verdict in ("fit", "extra", "review"):
-        # Best reading first (open to the candidate, then the LLM's match), then freshest: a posting
-        # applied to in its first 48 h competes with few others. Unread jobs go after the read ones.
-        items = sorted(groups[verdict], key=lambda r: (-_reading_rank(read.get(r["id"])), -_freshness_rank(r),
-                                                       -(r["score"] or 0)))[:limit]
-        if not items:
+    for q, title in QUEUES.items():
+        if queue and q != queue:
             continue
-        lines += [f"## {VERDICT_TITLES[verdict]} ({len(groups[verdict])})", ""]
-        lines += [_job_block(r, applied.get(r["id"]), read.get(r["id"])) for r in items]
+        lines += [f"# {title}", ""]
+        for verdict in ("fit", "extra", "review"):
+            # Best reading first (open to the candidate, then the LLM's match), then freshest: a posting
+            # applied to in its first 48 h competes with few others. Unread jobs go after the read ones.
+            group = groups[(q, verdict)]
+            items = sorted(group, key=lambda r: (-_reading_rank(read.get(r["id"])), -_freshness_rank(r),
+                                                 -(r["score"] or 0)))[:limit]
+            if not items:
+                continue
+            lines += [f"## {VERDICT_TITLES[verdict]} ({len(group)})", ""]
+            lines += [_job_block(r, applied.get(r["id"]), read.get(r["id"])) for r in items]
+    groups["out"] = groups[("direct", "out")] + groups[("ats", "out")]
 
     out_rows = groups["out"]
     if out_rows:
@@ -103,6 +134,11 @@ def _job_block(r, applied_number: int | None = None, reading=None) -> str:
             open_note = "not a specific role"
         block.append(f"**{reading['match']}/10** · {open_note} · {reading['why']}"
                      + (f" Blockers: {'; '.join(blockers)}." if blockers else ""))
+        warnings = json.loads(reading["warnings"] or "[]") if "warnings" in reading.keys() else []
+        if warnings:
+            block.append("⚠ page: " + "; ".join(warnings))
+        if r["verdict"] == "out":
+            block.append("(the rules filtered this post out; the reader disagrees)")
     if f.get("stack"):
         block.append("stack: " + ", ".join(f["stack"]))
     if f.get("reasons"):

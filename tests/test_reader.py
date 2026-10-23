@@ -1,6 +1,8 @@
 from vigia import db, notify, reader, report
 from vigia.models import Job
 
+PAGE_TEXT = reader.page_text
+
 
 def reading(match=8, eligible="yes", visa="not_stated", why="Fits.", posting=True):
     return {"is_job_posting": posting, "ecuador_eligible": eligible, "eligibility_quote": "", "visa_sponsorship": visa, "years_required": 3,
@@ -19,6 +21,7 @@ def setup(monkeypatch, readers, sent):
            "api_budget_usd": 3}
     monkeypatch.setattr(reader, "cfg", lambda: cfg)
     monkeypatch.setattr(reader, "cv_for", lambda category: f"CV for {category}")
+    monkeypatch.setattr(reader, "page_text", lambda url: "")
     monkeypatch.setattr(notify, "quiet", lambda now=None: False)
     monkeypatch.setattr(notify, "send", lambda title, body, url="", tags="": sent.append((title, tags)) or True)
 
@@ -147,3 +150,79 @@ def test_old_manatal_ids_do_not_push(monkeypatch):
     newest, recent, evergreen = job(4514070), job(4490060), job(311250)
     assert reader.worth_notifying(reading(9), newest) and reader.worth_notifying(reading(9), recent)
     assert not reader.worth_notifying(reading(9), evergreen)
+
+
+def test_quiet_hours_hold_the_push_until_morning(monkeypatch):
+    sent = []
+    setup(monkeypatch, [{"provider": "claude-p", "model": "sonnet"}], sent)
+    store("Night Engineer")
+    monkeypatch.setattr(reader, "read_claude_p", lambda *a: (reading(9), {}))
+    monkeypatch.setattr(notify, "quiet", lambda now=None: True)
+    assert reader.run()["notified"] == 1 and sent == []
+    monkeypatch.setattr(notify, "quiet", lambda now=None: False)
+    reader.run()
+    assert sent == [("9/10 · Night Engineer", "star")]
+    reader.run()
+    assert len(sent) == 1  # sent once
+
+
+def test_reads_the_full_page_and_keeps_its_warnings(monkeypatch):
+    sent = []
+    setup(monkeypatch, [{"provider": "claude-p", "model": "sonnet"}], sent)
+    job_id = store("Agent Developer")
+    monkeypatch.setattr(reader, "page_text", PAGE_TEXT)  # the real one this time
+
+    class Page:
+        status_code = 200
+        headers = {"Content-Type": "text/html"}
+        text = ('<html><script type="application/ld+json">{"@type": "JobPosting", "title": "Agent Developer", '
+                '"applicantLocationRequirements": {"@type": "Country", "name": "Philippines"}}</script>'
+                '<body><nav>menu</nav><p>Work from our Manila office.</p></body></html>')
+    monkeypatch.setattr(reader.http, "get", lambda *a, **k: Page())
+    seen = []
+    def fake(system, user, model):
+        seen.append(user)
+        return {**reading(9, eligible="no"), "warnings": ["Page says Philippines only"]}, {}
+    monkeypatch.setattr(reader, "read_claude_p", fake)
+    reader.run()
+    assert "Philippines" in seen[0] and "Manila office" in seen[0] and "menu" not in seen[0]
+    assert "⚠ page: Page says Philippines only" in report.new_jobs(since="2000-01-01T00:00:00+00:00")
+    assert job_id in db.readings([job_id])
+
+
+def test_linkedin_posts_the_rules_dropped_are_read_and_can_come_back(monkeypatch):
+    sent = []
+    setup(monkeypatch, [{"provider": "claude-p", "model": "sonnet"}], sent)
+    post = Job(source="linkedin_session", source_id="7518550280599461890", title="We're hiring a Backend Engineer",
+               company="Ana", url="https://www.linkedin.com/posts/ana_activity-7518550280599461890",
+               description="Silicon Valley startup across the US and LATAM, hiring in LATAM. " * 6)
+    db.upsert_job(post, "out", 0, {"category": "backend", "reasons": ["restricted: post names US"]})
+    listing = Job(source="ashby", source_id="x1", title="Backend Engineer", company="Acme", url="https://x/1",
+                  description="Python. " * 50)
+    db.upsert_job(listing, "out", 0, {"category": "backend", "reasons": ["restricted: US"]})
+    assert [j["source"] for j in reader.pending(10)] == ["linkedin_session"]  # out listings stay unread
+    monkeypatch.setattr(reader, "read_claude_p", lambda *a: (reading(8), {}))
+    reader.run()
+    text = report.new_jobs(since="2000-01-01T00:00:00+00:00", queue="direct")
+    assert "We're hiring a Backend Engineer" in text and "the reader disagrees" in text
+    assert "Queue 2" not in text.split("\n\n", 2)[2]
+
+
+def test_new_jobs_has_two_queues():
+    store("Ats Engineer")
+    board = Job(source="himalayas", source_id="h1", title="Board Engineer", company="B", url="https://h/1",
+                description="Python. " * 50)
+    db.upsert_job(board, "fit", 5, {"category": "backend"})
+    text = report.new_jobs(since="2000-01-01T00:00:00+00:00")
+    q1, q2 = text.index("# Queue 1"), text.index("# Queue 2")
+    assert q1 < text.index("Board Engineer") < q2 < text.index("Ats Engineer")
+    assert "Ats Engineer" not in report.new_jobs(since="2000-01-01T00:00:00+00:00", queue="direct")
+
+
+def test_a_gone_page_is_told_to_the_reader(monkeypatch):
+    monkeypatch.setattr(reader, "cfg", lambda: {})
+    class Gone:
+        status_code, headers, text = 410, {"Content-Type": "text/html"}, "<html>gone</html>"
+    monkeypatch.setattr(reader.http, "get", lambda *a, **k: Gone())
+    assert "410" in reader.page_text("https://remoteyeah.com/jobs/x")
+    assert reader.page_text("https://www.linkedin.com/posts/a_activity-1") == ""

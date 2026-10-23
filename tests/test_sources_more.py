@@ -604,3 +604,11 @@ def test_recruitee_uses_the_candidate_locations(monkeypatch, profile):
     monkeypatch.setattr(http, "get_json", lambda *a, **k: {"offers": [hubs]})
     job = ats_more.Recruitee({"boards": ["acme"]}).fetch()[0]
     assert job.location == "Remote job" and "Listed locations: Switzerland, Lugano; UAE, Dubai" in job.description
+
+
+def test_linkedin_session_author_is_never_the_age_or_a_button():
+    from vigia.sources.linkedin_session import post_author
+    assert post_author(["3d •", "Acme Talent", "Recruiting partner"]) == "Acme Talent"
+    assert post_author(["Python Devs LATAM", "Join", "Ana Pérez • 2nd", "Recruiter", "3d •"]) == "Ana Pérez"
+    assert post_author(["Ana Pérez", "• 3rd+", "Recruiter", "2h"]) == "Ana Pérez"
+    assert post_author(["3d •"]) == "LinkedIn post"
