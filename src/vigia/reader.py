@@ -62,9 +62,10 @@ SCHEMA = {
                   "description": "How well the candidate fits what the role needs, 1-10, ignoring location"},
         "why": {"type": "string", "description": "One sentence"},
         "warnings": {"type": "array", "items": {"type": "string"},
-                     "description": "Where the full page contradicts or narrows the listing: the country or region "
-                                    "the company really hires in, the posting is closed or expired, a different "
-                                    "company or role, a staffing agency reposting. Short phrases; [] if none."},
+                     "description": "Only what the full page says against the listing that changes whether to "
+                                    "apply: the country or region the company really hires in, the posting is "
+                                    "closed, expired or taken down, a different company or role. Not contract "
+                                    "type, agencies, pay or time zones. Short phrases; [] if none or no page."},
     },
 }
 SYSTEM = ("You screen job postings for one candidate. Be literal: use only what the posting says. When the full "
@@ -129,6 +130,8 @@ def page_text(url: str) -> str:
     for tag in soup(["script", "style", "noscript", "svg", "nav", "footer"]):
         tag.decompose()
     text = re.sub(r"\n\s*\n+", "\n", soup.get_text("\n")).strip()
+    if len(text) < 200 and not facts:  # a page drawn by JavaScript: nothing to compare
+        return ""
     limit = int(cfg().get("page_chars", 12000))
     return (("Structured data (JobPosting): " + " ".join(facts) + "\n\n") if facts else "") + text[:limit]
 

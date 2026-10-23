@@ -226,3 +226,7 @@ def test_a_gone_page_is_told_to_the_reader(monkeypatch):
     monkeypatch.setattr(reader.http, "get", lambda *a, **k: Gone())
     assert "410" in reader.page_text("https://remoteyeah.com/jobs/x")
     assert reader.page_text("https://www.linkedin.com/posts/a_activity-1") == ""
+    class Empty:
+        status_code, headers, text = 200, {"Content-Type": "text/html"}, "<html><body>BambooHR</body></html>"
+    monkeypatch.setattr(reader.http, "get", lambda *a, **k: Empty())
+    assert reader.page_text("https://acme.bamboohr.com/careers/1") == ""
