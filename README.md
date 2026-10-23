@@ -75,6 +75,7 @@ verdict, so the person only reads what survives.
 | `openroles` | Companies and postings from the [openroles](https://openroles.today) dataset (54 ATS, nightly; data CC BY-SA 4.0 by datascry/openroles): new boards are checked once and watched if anything passes; postings on ATS without a Vigía source are read from their page | public data |
 | `discover` | Finds companies to watch: Google searches on ATS job pages (Ashby, Greenhouse, Lever, Workable, Teamtailor); boards with jobs in scope are added to their ATS source | Serper API key |
 | `remoteyeah` | RemoteYeah listing pages (Latin America, Python, FastAPI, LLMs, Django), job pages read for their JSON-LD | public pages |
+| `freehire` | freehire.me's open index (100+ ATS, aggregators, Telegram): jobs that name Ecuador as eligible, and LATAM/global remote tech roles, posted in the last 2 days | public API, no key |
 | `linkedin_posts` | LinkedIn **hiring posts**, found via Google's index (Serper), read logged-out | Serper API key + public pages |
 | `linkedin_posts_apify` | LinkedIn **hiring posts** from LinkedIn's own post search, run by an Apify actor; launched by hand (MCP `search_linkedin_posts`), capped per run and per month | Apify token (paid per post) |
 

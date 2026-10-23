@@ -634,3 +634,26 @@ def test_linkedin_session_matches_links_by_author_when_counts_differ():
     assert got[1][1] == "1" and got[2][1] == "2"
     assert got[0] == ("", "") and got[3] == ("", "")  # two left, one link: no guessing
     assert [i for _, i in match_urls(posts[:2] + [{"author": "Y"}], urls)] == ["2", "1", "3"]
+
+
+def test_freehire_maps_eligibility_and_pages(monkeypatch):
+    from vigia.sources import freehire
+    def row(i, **kw):
+        return {"public_slug": f"job-{i}", "source": "lever", "url": f"https://jobs.lever.co/acme/{i}?utm_source=freehire.me",
+                "title": "Backend Engineer", "company": "Acme", "location": "Remote", "countries": [], "regions": [],
+                "work_mode": "remote", "posted_at": "2026-10-23T13:58:04Z", "description": "Python. " * 30,
+                "enrichment": {"salary_min": 3000, "salary_max": 4000, "salary_currency": "USD", "salary_period": "month"},
+                "reality": {"class": "fresh", "repost_count": 3}, **kw}
+    pages = {0: [row(i) for i in range(100)], 100: [row(100, countries=["co", "ec"], location="Remote, Colombia"),
+                                                   row(101, regions=["global"])]}
+    calls = []
+    def get_json(source, kind, url, params=None):
+        calls.append(params)
+        return {"data": pages.get(params["offset"], [])} if params.get("countries") == "ec" else {"data": []}
+    monkeypatch.setattr(freehire.http, "get_json", get_json)
+    jobs = {j.source_id: j for j in freehire.FreeHire({}).fetch()}
+    assert len(jobs) == 102 and [c["offset"] for c in calls if c.get("countries")] == [0, 100]
+    assert jobs["job-100"].location == "Remote, Colombia (eligible: Ecuador)"
+    assert jobs["job-101"].location == "Remote (Worldwide)"
+    assert jobs["job-0"].url == "https://jobs.lever.co/acme/0" and jobs["job-0"].salary == "USD 3,000–4,000/month"
+    assert "reposted:3" in jobs["job-0"].tags and all(c["open_within_days"] == 2 for c in calls)

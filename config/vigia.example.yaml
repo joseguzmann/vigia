@@ -189,6 +189,13 @@ sources:
     enabled: true
     every_minutes: 240
     queries: [ai engineer, llm, python backend, agentic]
+  freehire:
+    # freehire.me public API (no key, ~600 requests/hour per address, personal use): jobs it
+    # read from 100+ ATS and aggregators, with the eligible countries/regions already normalized.
+    enabled: true
+    every_minutes: 60
+    open_within_days: 2
+    # searches: default = Ecuador named as eligible (any category) + LATAM and global remote tech roles
   jobicy:
     enabled: true
     every_minutes: 360
