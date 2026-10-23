@@ -620,3 +620,15 @@ def test_linkedin_session_drops_the_page_footer():
             "Are these results helpful?\nYour feedback helps us improve search results\nLoad more")
     [p] = split_posts(text)
     assert p["text"] == "#Hiring AI Engineer LATAM\nSend your CV"
+
+
+def test_linkedin_session_matches_links_by_author_when_counts_differ():
+    from vigia.sources.linkedin_session import match_urls
+    posts = [{"author": "Hire South"}, {"author": "Michelle Landa"}, {"author": "Pablo Galván Leyes"}, {"author": "X"}]
+    urls = [("https://www.linkedin.com/posts/pablo-galvan-leyes_activity-2", "2"),
+            ("https://www.linkedin.com/posts/michelle-landa_activity-1", "1"),
+            ("https://www.linkedin.com/posts/hiring-aiengineer-share-3", "3")]
+    got = match_urls(posts, urls)
+    assert got[1][1] == "1" and got[2][1] == "2"
+    assert got[0] == ("", "") and got[3] == ("", "")  # two left, one link: no guessing
+    assert [i for _, i in match_urls(posts[:2] + [{"author": "Y"}], urls)] == ["2", "1", "3"]

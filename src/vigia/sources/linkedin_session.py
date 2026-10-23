@@ -19,10 +19,12 @@ clears the state by hand. It never tries to get past a check.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import random
 import re
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -101,6 +103,30 @@ def post_urls(references: list[dict]) -> list[tuple[str, str]]:
     return out
 
 
+def _slug(name: str) -> str:
+    plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", "-", plain).strip("-")
+
+
+def match_urls(posts: list[dict], urls: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """A (url, id) per post, or ("", ""). The captured permalinks are not in result order and
+    can be fewer than the posts, so match by author first (/posts/<author-handle>_activity-…),
+    then by position among what is left only when the counts agree."""
+    out: list[tuple[str, str]] = [("", "")] * len(posts)
+    left = list(urls)
+    for i, p in enumerate(posts):
+        slug = _slug(p["author"])
+        hits = [u for u in left if slug and _slug(u[0].split("/posts/")[1].split("_")[0]) == slug]
+        if len(hits) == 1:
+            out[i] = hits[0]
+            left.remove(hits[0])
+    unmatched = [i for i, u in enumerate(out) if not u[0]]
+    if unmatched and len(unmatched) == len(left):
+        for i, u in zip(unmatched, left):
+            out[i] = u
+    return out
+
+
 class LinkedInSession(Source):
     name = "linkedin_session"
 
@@ -176,14 +202,14 @@ class LinkedInSession(Source):
             return []
 
         posts = split_posts(text)
-        urls = post_urls(data.get("references", {}).get("search_results", []))
+        urls = match_urls(posts, post_urls(data.get("references", {}).get("search_results", [])))
         out = []
         for i, p in enumerate(posts):
             if not HIRING_RE.search(p["text"]) or NOT_HIRING_RE.search(p["text"]):
                 continue
-            url, pid = urls[i] if i < len(urls) and len(urls) == len(posts) else ("", "")
+            url, pid = urls[i]
             out.append(Job(
-                source=self.name, source_id=pid or str(abs(hash(p["text"][:200]))),
+                source=self.name, source_id=pid or hashlib.sha1(p["text"][:200].encode()).hexdigest()[:16],
                 title=p["text"].splitlines()[0][:160], company=p["author"],
                 url=url or f"https://www.linkedin.com/search/results/content/?keywords={q}",
                 location="", remote=None, posted_at=posted_from_id(pid) if pid else None, description=p["text"],
