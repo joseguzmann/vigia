@@ -290,8 +290,22 @@ def manatal_recent(source_id: str) -> bool:
     return job_id >= newest - int(cfg().get("manatal_recent_ids", 100000))
 
 
+SENIOR_RE = re.compile(r"\b(senior|sr\.?|lead|staff|principal)\b", re.I)
+
+
+def cautions(title: str, eligible: str = "", quote: str = "") -> list[str]:
+    """What Jose checks by hand before applying (DECISIONES 2026-10-23: warn, never filter): a Senior-type
+    title (16 cold Senior applications gave nothing) and an eligibility the reader could not settle."""
+    out = []
+    if SENIOR_RE.search(title or ""):
+        out.append("Senior title: check the years asked (≤4 is the trial rule)")
+    if eligible == "unclear":
+        out.append("Ecuador eligibility unclear" + (f": \"{quote[:140]}\"" if quote else ": the posting does not say"))
+    return out
+
+
 def push(job: dict, reading: dict) -> None:
-    warn = reading.get("warnings") or []
+    warn = (reading.get("warnings") or []) + cautions(job["title"], reading.get("ecuador_eligible", ""))
     notify.send(f"{reading['match']}/10 · {job['title'][:70]}",
                 f"{job['company']} · {job.get('location') or 'location n/a'}\n{reading['why'][:300]}"
                 + (f"\n⚠ {'; '.join(warn)[:200]}" if warn else ""),

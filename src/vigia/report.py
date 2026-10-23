@@ -6,7 +6,7 @@ import json
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 
-from vigia import config, db
+from vigia import config, db, reader
 from vigia.sources import REGISTRY
 
 VERDICT_TITLES = {"fit": "Worth applying", "extra": "Extra: abroad with visa/relocation",
@@ -137,6 +137,9 @@ def _job_block(r, applied_number: int | None = None, reading=None) -> str:
         warnings = json.loads(reading["warnings"] or "[]") if "warnings" in reading.keys() else []
         if warnings:
             block.append("⚠ page: " + "; ".join(warnings))
+        checks = reader.cautions(r["title"], reading["eligible"], reading["quote"] or "")
+        if checks:
+            block.append("⚠ check: " + "; ".join(checks))
         if r["verdict"] == "out":
             block.append("(the rules filtered this post out; the reader disagrees)")
     if f.get("stack"):

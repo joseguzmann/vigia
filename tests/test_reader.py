@@ -230,3 +230,14 @@ def test_a_gone_page_is_told_to_the_reader(monkeypatch):
         status_code, headers, text = 200, {"Content-Type": "text/html"}, "<html><body>BambooHR</body></html>"
     monkeypatch.setattr(reader.http, "get", lambda *a, **k: Empty())
     assert reader.page_text("https://acme.bamboohr.com/careers/1") == ""
+
+
+def test_senior_titles_and_unclear_eligibility_are_flagged_not_filtered():
+    assert reader.cautions("Senior AI Engineer")[0].startswith("Senior title")
+    assert reader.cautions("Sr. Backend Developer") and reader.cautions("Tech Lead, Platform")
+    assert reader.cautions("Backend Engineer") == []
+    assert "Ecuador eligibility unclear" in reader.cautions("AI Engineer", "unclear")[0]
+    job_id = store("Senior Backend Engineer")
+    db.save_reading(job_id, "m", reading(9, eligible="unclear"), {})
+    text = report.new_jobs(since="2000-01-01T00:00:00+00:00")
+    assert "Senior Backend Engineer" in text and "⚠ check: Senior title" in text and "eligibility unclear" in text
