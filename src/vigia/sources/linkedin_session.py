@@ -84,6 +84,8 @@ def split_posts(text: str) -> list[dict]:
             (i for i, ln in enumerate(lines[:8]) if AGE_RE.fullmatch(ln)), 0)
         author = post_author(lines[:head_end] if head_end else lines[:1])
         body = lines[head_end + 1:] if head_end else lines[1:]
+        while body and body[0].lower() in BUTTONS:  # a group post's "Join" can land after the header
+            body.pop(0)
         # The tail is reaction counts and boilerplate.
         while body and (re.fullmatch(r"[\d\s​]*(reactions?|comments?|reposts?)?", body[-1], re.I)
                         or body[-1].startswith(("Are these results", "Your feedback", "Load more", "… more", "...more"))):

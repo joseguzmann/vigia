@@ -389,6 +389,8 @@ def test_linkedin_session_reads_group_posts_without_follow():
             "#WeAreHiring Senior AI Engineer, remote LATAM\n\n3 reactions\n")
     [p] = split_posts(text)
     assert p["author"] == "Michelle Landa" and p["text"].startswith("#WeAreHiring")
+    [p] = split_posts(text.replace("5h\n\n", "5h\n\nJoin\n\n"))
+    assert p["text"].startswith("#WeAreHiring")
 
 
 def test_openroles_maps_rows_to_boards_and_keeps_open_remote_roles():
