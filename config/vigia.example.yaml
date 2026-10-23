@@ -352,8 +352,6 @@ reader:
   notify_max_posted_days: 3  # a posting older than this is not news
   new_board_grace_hours: 36  # undated jobs from a board added this recently came with it: no push
   manatal_recent_ids: 100000  # Manatal has no dates: ids this far below the newest are old postings
-  notify_max_posted_days: 3  # and a posting older than this is not news
-  new_board_grace_hours: 36  # undated jobs from a board added this recently came with it: no push
   alert_every_hours: 6
   api_budget_usd: 3          # per month, for the API readers
   candidate: "The candidate lives in <city, country>. They can work remotely, or on-site/hybrid in <city>; they would move abroad only with visa sponsorship."
