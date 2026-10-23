@@ -84,7 +84,7 @@ def split_posts(text: str) -> list[dict]:
         body = lines[head_end + 1:] if head_end else lines[1:]
         # The tail is reaction counts and boilerplate.
         while body and (re.fullmatch(r"[\d\s​]*(reactions?|comments?|reposts?)?", body[-1], re.I)
-                        or body[-1].startswith("Are these results") or body[-1].startswith("Your feedback")):
+                        or body[-1].startswith(("Are these results", "Your feedback", "Load more", "… more", "...more"))):
             body.pop()
         if body:
             out.append({"author": author, "text": "\n".join(body)})

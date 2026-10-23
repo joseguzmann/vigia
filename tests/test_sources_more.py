@@ -612,3 +612,11 @@ def test_linkedin_session_author_is_never_the_age_or_a_button():
     assert post_author(["Python Devs LATAM", "Join", "Ana Pérez • 2nd", "Recruiter", "3d •"]) == "Ana Pérez"
     assert post_author(["Ana Pérez", "• 3rd+", "Recruiter", "2h"]) == "Ana Pérez"
     assert post_author(["3d •"]) == "LinkedIn post"
+
+
+def test_linkedin_session_drops_the_page_footer():
+    from vigia.sources.linkedin_session import split_posts
+    text = ("Feed post\n\nHire Maven\n\n1w\n\nFollow\n\n#Hiring AI Engineer LATAM\n\nSend your CV\n… more\n5\n\u200b\n"
+            "Are these results helpful?\nYour feedback helps us improve search results\nLoad more")
+    [p] = split_posts(text)
+    assert p["text"] == "#Hiring AI Engineer LATAM\nSend your CV"
