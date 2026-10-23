@@ -277,6 +277,18 @@ def kept_urls(source: str, days: int) -> str:
     return "\n".join((r["url"] or "").lower() for r in rows)
 
 
+def board_added_recently(source: str, url: str, seen: datetime, window) -> bool:
+    """True if this job's board was discovered within `window` before the job was first seen,
+    i.e. the job came in with the board's first read, not as a new posting."""
+    from vigia.sources.base import board_key
+    low = (url or "").lower()
+    since = (seen - window).isoformat(timespec="seconds")
+    for r in conn().execute("SELECT slug FROM discovered_boards WHERE ats = ? AND found_at >= ?", (source, since)):
+        if board_key(r["slug"]) in low:
+            return True
+    return False
+
+
 def save_reading(job_id: int, model: str, r: dict, usage: dict) -> None:
     conn().execute(
         "INSERT OR REPLACE INTO job_readings (job_id, read_at, model, eligible, quote, visa, years, level, blockers, "

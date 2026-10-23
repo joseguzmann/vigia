@@ -112,3 +112,23 @@ def test_claude_p_never_sees_the_api_key(monkeypatch):
     monkeypatch.setattr(reader.subprocess, "run", run)
     reader.read_claude_p("system", "user", "sonnet")
     assert "ANTHROPIC_API_KEY" not in seen and seen["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-subscription"
+
+
+def test_jobs_from_a_just_added_board_or_old_postings_do_not_push(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    sent = []
+    setup(monkeypatch, [{"provider": "claude-p", "model": "sonnet"}], sent)
+    now = datetime.now(timezone.utc)
+    def job(slug, posted=None):
+        j = Job(source="manatal", source_id=slug, title=f"{slug} Engineer", company=slug,
+                url=f"https://www.careers-page.com/{slug}/job/X1", description="Python. " * 50,
+                posted_at=posted)
+        db.upsert_job(j, "fit", 5, {"category": "backend"})
+        return dict(db.conn().execute("SELECT * FROM jobs WHERE source_id = ?", (slug,)).fetchone())
+    db.add_discovered("manatal", "newco", "watching", "openroles-tenants", "", 1)  # added just now
+    db.add_discovered("manatal", "oldco", "watching", "openroles-tenants", "", 1)
+    db.conn().execute("UPDATE discovered_boards SET found_at = ? WHERE slug = 'oldco'", ((now - timedelta(days=5)).isoformat(),))
+    assert not reader.worth_notifying(reading(9), job("newco"))       # whole board came in with its first read
+    assert reader.worth_notifying(reading(9), job("oldco"))           # watched for days: a real new posting
+    assert not reader.worth_notifying(reading(9), job("dated", now - timedelta(days=10)))  # old posting
+    assert reader.worth_notifying(reading(9), job("fresh", now - timedelta(hours=5)))

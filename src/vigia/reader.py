@@ -192,9 +192,21 @@ def worth_notifying(reading: dict, job: dict | None = None) -> bool:
             and reading["match"] >= int(cfg().get("notify_min_match", 7)))
     if not good or job is None:
         return good
+    now = datetime.now(timezone.utc)
     # A backlog read (reader just switched on, or catching up) is scored but not pushed.
     seen = datetime.fromisoformat(job["first_seen"])
-    return datetime.now(timezone.utc) - seen <= timedelta(hours=float(cfg().get("notify_max_age_hours", 12)))
+    if now - seen > timedelta(hours=float(cfg().get("notify_max_age_hours", 12))):
+        return False
+    # New to Vigía is not new to the world: a company just added brings its whole open board.
+    # With a posting date, it must be recent; without one, the board must have been watched
+    # since before the job appeared.
+    if job.get("posted_at"):
+        posted = datetime.fromisoformat(job["posted_at"])
+        if posted.tzinfo is None:
+            posted = posted.replace(tzinfo=timezone.utc)
+        return now - posted <= timedelta(days=float(cfg().get("notify_max_posted_days", 3)))
+    return not db.board_added_recently(job["source"], job["url"], seen,
+                                       timedelta(hours=float(cfg().get("new_board_grace_hours", 36))))
 
 
 def run() -> dict:
