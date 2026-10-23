@@ -56,7 +56,9 @@ services:
   #   -p 127.0.0.1:6080:6080 stickerdaniel/linkedin-mcp-server:latest --login --login-viewer
   # Not published: only the vigia container reaches it.
   linkedin-mcp:
-    image: stickerdaniel/linkedin-mcp-server:latest
+    # The upstream image, pinned, with post search clicking "Load more" (docker/linkedin-mcp).
+    build: docker/linkedin-mcp
+    image: vigia-linkedin-mcp
     container_name: linkedin-mcp
     profiles: [linkedin]
     restart: unless-stopped
