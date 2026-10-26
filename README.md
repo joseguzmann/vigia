@@ -171,10 +171,11 @@ shorten the location to "Worldwide" or "Remote"; when the page says otherwise, o
 the reading carries a `warnings` line. LinkedIn posts are read even when the rules filtered them
 out, and one the reader finds open and good comes back as "worth a look".
 
-`new_jobs` opens with the LinkedIn posts the reader scored 7 or more, whatever the rules said
-about them, and then comes in two queues, each ranked on its own: LinkedIn, posts and job boards
-first, company career pages (ATS) second, so a company load's hundreds of roles can't bury the few
-posts. A post with no date ranks by when Vigía first saw it.
+`new_jobs` comes in three lists, each ranked on its own: LinkedIn posts (from any post source;
+a post the rules filtered out comes back when the reader finds it good), job boards (LinkedIn's job
+search, the boards, email alerts) and company career pages (ATS). That way neither a company load's
+hundreds of roles nor the board listings can bury the few posts. A post with no date ranks by when
+Vigía first saw it.
 
 The signed-in post search (`linkedin_session`) keeps each post's permalink when LinkedIn gives one
 (as `/posts/<author>_…` or `/feed/update/urn:li:activity:…`, matched to the post by its author's

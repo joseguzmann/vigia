@@ -41,7 +41,8 @@ def main(argv: list[str] | None = None) -> int:
     rep.add_argument("--since", help="ISO timestamp (default: last review)")
     rep.add_argument("--all", action="store_true", help="also list filtered-out jobs")
     rep.add_argument("--limit", type=int, default=60)
-    rep.add_argument("--queue", choices=["direct", "ats"], default="", help="only one queue (default both)")
+    rep.add_argument("--queue", choices=["posts", "boards", "ats", "direct"], default="",
+                     help="only one list (default all three; direct = posts and boards)")
     rep.add_argument("--mark", action="store_true", help="mark everything up to now as reviewed")
 
     h = sub.add_parser("health", help="status of each source")

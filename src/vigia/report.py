@@ -12,14 +12,16 @@ from vigia.sources import REGISTRY
 VERDICT_TITLES = {"fit": "Worth applying", "extra": "Extra: abroad with visa/relocation",
                   "review": "Worth a look", "out": "Filtered out"}
 
-# Two queues, so the hundreds of jobs a company load brings in can't bury the few LinkedIn posts
-# and board listings: company career pages (an ATS read directly) on one side, everything else
-# (LinkedIn, posts, job boards, email alerts) on the other. A job also seen outside an ATS is "direct".
+# Three lists, so neither the hundreds of jobs a company load brings in nor the board listings can
+# bury the few LinkedIn posts: posts (from any of the post sources), job boards (LinkedIn's job
+# search, the boards, email alerts) and company career pages (an ATS read directly). A post is a
+# post wherever else it was seen; a job also seen outside an ATS is a board job.
 ATS = {"greenhouse", "ashby", "lever", "workday", "teamtailor", "workable", "smartrecruiters", "breezy",
        "recruitee", "bamboohr", "rippling", "manatal"}
-QUEUES = {"direct": "Queue 1 — LinkedIn, posts and job boards", "ats": "Queue 2 — company career pages (ATS)"}
+QUEUES = {"posts": "List 1 — LinkedIn posts", "boards": "List 2 — job boards (LinkedIn jobs, boards, email alerts)",
+          "ats": "List 3 — company career pages (ATS)"}
+QUEUE_ALIASES = {"direct": ("posts", "boards")}  # the old name of lists 1 and 2 together
 POST_SOURCES = ("linkedin_posts", "linkedin_posts_apify", "linkedin_session")
-POST_MIN_MATCH = 7  # a post the reader scored this high is listed by name, whatever the rules said
 
 
 def is_post(r) -> bool:
@@ -28,14 +30,16 @@ def is_post(r) -> bool:
 
 
 def channel(r) -> str:
+    if is_post(r):
+        return "posts"
     seen = {s["source"].split(":")[0] for s in json.loads(r["seen_in"] or "[]")} or {r["source"]}
-    return "ats" if seen <= ATS else "direct"
+    return "ats" if seen <= ATS else "boards"
 
 
 def _verdict(r, reading) -> str:
     """A LinkedIn post the rules filtered out comes back as "worth a look" when the reader finds it
     a real, open role that fits: the rules misread posts more than listings."""
-    if (r["verdict"] == "out" and r["source"] in POST_SOURCES and reading is not None and reading["is_posting"] != 0
+    if (r["verdict"] == "out" and is_post(r) and reading is not None and reading["is_posting"] != 0
             and reading["eligible"] != "no" and reading["match"] >= 6):
         return "review"
     return r["verdict"]
@@ -51,10 +55,12 @@ def mark_reviewed() -> None:
 
 
 def new_jobs(since: str | None = None, include_out: bool = False, limit: int = 60, queue: str = "") -> str:
-    """Both queues (or one: queue="direct" or "ats"), each with its own `limit` per verdict."""
+    """The three lists (or some: queue="posts", "boards", "ats", or "direct" for posts and boards),
+    each with its own `limit` per verdict."""
+    wanted = QUEUE_ALIASES.get(queue, (queue,) if queue else tuple(QUEUES))
     since = since or last_review()
     rows = db.jobs_since(since)
-    read = db.readings([r["id"] for r in rows if r["verdict"] != "out" or r["source"] in POST_SOURCES])
+    read = db.readings([r["id"] for r in rows if r["verdict"] != "out" or is_post(r)])
     groups = defaultdict(list)
     for r in rows:
         groups[(channel(r), _verdict(r, read.get(r["id"])))].append(r)
@@ -66,30 +72,21 @@ def new_jobs(since: str | None = None, include_out: bool = False, limit: int = 6
     lines.append("")
     applied = {r["job_id"]: r["number"] for r in db.conn().execute(
         "SELECT job_id, number FROM applications WHERE job_id IS NOT NULL")}
-    # LinkedIn posts first and on their own: in the queues they sank under the board listings
-    # (no date, a search URL, "eligibility unclear") and good ones went unseen for days.
-    posts = [r for r in rows if is_post(r) and read.get(r["id"]) is not None
-             and read[r["id"]]["match"] >= POST_MIN_MATCH and (queue in ("", "direct"))]
-    shown = {r["id"] for r in posts}
-    if posts:
-        posts.sort(key=lambda r: (-_reading_rank(read.get(r["id"])), -_freshness_rank(r)))
-        lines += [f"# LinkedIn posts the reader scored {POST_MIN_MATCH}+ ({len(posts)})", ""]
-        lines += [_job_block(r, applied.get(r["id"]), read.get(r["id"])) for r in posts[:limit]]
     for q, title in QUEUES.items():
-        if queue and q != queue:
+        if q not in wanted:
             continue
         lines += [f"# {title}", ""]
         for verdict in ("fit", "extra", "review"):
             # Best reading first (open to the candidate, then the LLM's match), then freshest: a posting
             # applied to in its first 48 h competes with few others. Unread jobs go after the read ones.
             group = groups[(q, verdict)]
-            items = sorted((r for r in group if r["id"] not in shown), key=lambda r: (-_reading_rank(read.get(r["id"])), -_freshness_rank(r),
+            items = sorted(group, key=lambda r: (-_reading_rank(read.get(r["id"])), -_freshness_rank(r),
                                                  -(r["score"] or 0)))[:limit]
             if not items:
                 continue
             lines += [f"## {VERDICT_TITLES[verdict]} ({len(group)})", ""]
             lines += [_job_block(r, applied.get(r["id"]), read.get(r["id"])) for r in items]
-    groups["out"] = groups[("direct", "out")] + groups[("ats", "out")]
+    groups["out"] = [r for q in QUEUES for r in groups[(q, "out")]]
 
     out_rows = groups["out"]
     if out_rows:

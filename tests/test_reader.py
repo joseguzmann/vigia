@@ -203,20 +203,24 @@ def test_linkedin_posts_the_rules_dropped_are_read_and_can_come_back(monkeypatch
     assert [j["source"] for j in reader.pending(10)] == ["linkedin_session"]  # out listings stay unread
     monkeypatch.setattr(reader, "read_claude_p", lambda *a: (reading(8), {}))
     reader.run()
-    text = report.new_jobs(since="2000-01-01T00:00:00+00:00", queue="direct")
+    text = report.new_jobs(since="2000-01-01T00:00:00+00:00", queue="posts")
     assert "We're hiring a Backend Engineer" in text and "the reader disagrees" in text
-    assert "Queue 2" not in text.split("\n\n", 2)[2]
+    assert "# List 3" not in text and "# List 2" not in text
 
 
-def test_new_jobs_has_two_queues():
+def test_new_jobs_has_three_lists():
     store("Ats Engineer")
     board = Job(source="himalayas", source_id="h1", title="Board Engineer", company="B", url="https://h/1",
                 description="Python. " * 50)
     db.upsert_job(board, "fit", 5, {"category": "backend"})
+    post = Job(source="linkedin_session", source_id="p1", title="We're hiring a Post Engineer", company="Ana",
+               url="https://p/1", description="Python. " * 50, tags=["post"])
+    db.upsert_job(post, "fit", 5, {"category": "backend"})
     text = report.new_jobs(since="2000-01-01T00:00:00+00:00")
-    q1, q2 = text.index("# Queue 1"), text.index("# Queue 2")
-    assert q1 < text.index("Board Engineer") < q2 < text.index("Ats Engineer")
-    assert "Ats Engineer" not in report.new_jobs(since="2000-01-01T00:00:00+00:00", queue="direct")
+    l1, l2, l3 = (text.index(f"# List {n}") for n in (1, 2, 3))
+    assert l1 < text.index("Post Engineer") < l2 < text.index("Board Engineer") < l3 < text.index("Ats Engineer")
+    direct = report.new_jobs(since="2000-01-01T00:00:00+00:00", queue="direct")
+    assert "Ats Engineer" not in direct and "Post Engineer" in direct and "Board Engineer" in direct
 
 
 def test_a_gone_page_is_told_to_the_reader(monkeypatch):
@@ -243,12 +247,12 @@ def test_senior_titles_and_unclear_eligibility_are_flagged_not_filtered():
     assert "Senior Backend Engineer" in text and "⚠ check: Senior title" in text and "eligibility unclear" in text
 
 
-def test_new_jobs_lists_good_linkedin_posts_first_whatever_the_rules_said():
+def test_good_linkedin_posts_go_to_the_posts_list_whatever_the_rules_said():
     good = Job(source="linkedin_session", source_id="1", title="Python Engineer at Acme", company="Marta",
                url="https://www.linkedin.com/in/marta/recent-activity/all/", description="Python. " * 40, tags=["post"])
     weak = Job(source="linkedin_session", source_id="2", title="Some other post", company="Bob",
                url="https://x/2", description="Python. " * 40, tags=["post"])
-    db.upsert_job(good, "review", 6, {"category": "backend"})
+    db.upsert_job(good, "out", 0, {"category": "backend", "reasons": ["eligibility unclear"]})
     db.upsert_job(weak, "out", 0, {"category": "backend", "reasons": ["title out of scope"]})
     gid, wid = (db.conn().execute("SELECT id FROM jobs WHERE source_id = ?", (i,)).fetchone()[0] for i in ("1", "2"))
     listing = store("Board Engineer")
@@ -256,7 +260,5 @@ def test_new_jobs_lists_good_linkedin_posts_first_whatever_the_rules_said():
     db.save_reading(wid, "m", reading(5), {})
     db.save_reading(listing, "m", reading(9), {})
     text = report.new_jobs(since="2000-01-01T00:00:00+00:00")
-    head = text.split("# Queue 1")[0]
-    assert "# LinkedIn posts the reader scored 7+ (1)" in head and "Python Engineer at Acme" in head
-    assert text.count("Python Engineer at Acme") == 1           # not repeated in the queue
-    assert "Some other post" not in head and "Board Engineer" not in head
+    posts = text[text.index("# List 1"):text.index("# List 2")]
+    assert "Python Engineer at Acme" in posts and "Some other post" not in posts and "Board Engineer" not in posts
