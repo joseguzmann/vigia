@@ -142,7 +142,7 @@ OPEN_STRONG_RE = re.compile(
     r"|anywhere\s+in\s+(?:the\s+)?"
     r"|(?:you\s+(?:are|must\s+be)\s+)?(?:based|located|living|residing)\s+(?:anywhere\s+)?in\s+(?:the\s+)?"
     r"|work\s+(?:remotely\s+)?from\s+(?:anywhere\s+in\s+)?(?:the\s+)?)" + LATAM +
-    r"|\b(?:remote|remoto)\s*[-–(,/]\s*" + LATAM +
+    r"|\b(?:remote|remoto)\s*(?:[-–(,/|·•:]\s*)?" + LATAM +
     r"|\b(?:remote|remoto)\s+(?:from|in|within|desde|en)\s+(?:the\s+)?" + LATAM, re.I)
 # "Anywhere" phrases are mostly culture/perks copy ("our team works from anywhere in the
 # world"). They only count when the location itself is generic; a named city or country

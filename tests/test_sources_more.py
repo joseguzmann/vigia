@@ -331,7 +331,8 @@ def test_linkedin_session_splits_posts_and_links():
             {"kind": "feed_post", "url": "/feed/update/urn:li:activity:7518250073844064256/"},
             {"kind": "person", "url": "/in/ana/"},
             {"kind": "feed_post", "url": "/posts/ana_open-activity-7517208697547288576-BvQA"}]
-    assert [i for _, i in post_urls(refs)] == ["7516542601848848385", "7517208697547288576"]
+    # A /feed/update/ urn is a post link too (it has no author in it).
+    assert [i for _, i in post_urls(refs)] == ["7516542601848848385", "7518250073844064256", "7517208697547288576"]
 
 
 def test_linkedin_session_keeps_hiring_posts_and_pauses_on_a_check(monkeypatch):
@@ -385,10 +386,10 @@ def test_linkedin_session_paces_like_a_person(monkeypatch):
 
 def test_linkedin_session_reads_group_posts_without_follow():
     from vigia.sources.linkedin_session import split_posts
-    text = ("Feed post\n\nAI Tools & Productivity\n\nMichelle Landa • 3rd+\n\nRecruiter at Niuro\n\n5h\n\n"
+    text = ("Feed post\n\nAI Tools & Productivity\n\nSara Luna • 3rd+\n\nRecruiter at Niuro\n\n5h\n\n"
             "#WeAreHiring Senior AI Engineer, remote LATAM\n\n3 reactions\n")
     [p] = split_posts(text)
-    assert p["author"] == "Michelle Landa" and p["text"].startswith("#WeAreHiring")
+    assert p["author"] == "Sara Luna" and p["text"].startswith("#WeAreHiring")
     [p] = split_posts(text.replace("5h\n\n", "5h\n\nJoin\n\n"))
     assert p["text"].startswith("#WeAreHiring")
 
@@ -626,9 +627,9 @@ def test_linkedin_session_drops_the_page_footer():
 
 def test_linkedin_session_matches_links_by_author_when_counts_differ():
     from vigia.sources.linkedin_session import match_urls
-    posts = [{"author": "Hire South"}, {"author": "Michelle Landa"}, {"author": "Pablo Galván Leyes"}, {"author": "X"}]
-    urls = [("https://www.linkedin.com/posts/pablo-galvan-leyes_activity-2", "2"),
-            ("https://www.linkedin.com/posts/michelle-landa_activity-1", "1"),
+    posts = [{"author": "Hire Co"}, {"author": "Sara Luna"}, {"author": "Raúl Vega Leyes"}, {"author": "X"}]
+    urls = [("https://www.linkedin.com/posts/raul-vega-leyes_activity-2", "2"),
+            ("https://www.linkedin.com/posts/sara-luna_activity-1", "1"),
             ("https://www.linkedin.com/posts/hiring-aiengineer-share-3", "3")]
     got = match_urls(posts, urls)
     assert got[1][1] == "1" and got[2][1] == "2"
@@ -657,3 +658,39 @@ def test_freehire_maps_eligibility_and_pages(monkeypatch):
     assert jobs["job-101"].location == "Remote (Worldwide)"
     assert jobs["job-0"].url == "https://jobs.lever.co/acme/0" and jobs["job-0"].salary == "USD 3,000–4,000/month"
     assert "reposted:3" in jobs["job-0"].tags and all(c["open_within_days"] == 2 for c in calls)
+
+
+def test_linkedin_session_collapses_twin_links_and_keeps_the_named_one():
+    from vigia.sources import linkedin_session as ls
+    # The same post as an activity urn and as /posts/<handle>_…-share-<id>, created ~1 s apart.
+    refs = [{"kind": "feed_post", "url": "/feed/update/urn:li:activity:7519139863988715521/"},
+            {"kind": "feed_post", "url": "/posts/rojasana_oportunidad-share-7519139863166619648-r3z7"},
+            {"kind": "feed_post", "url": "/feed/update/urn:li:share:7519139863166619648/"}]
+    [(url, pid)] = ls.post_urls(refs)
+    assert "/posts/rojasana" in url and pid == "7519139863166619648"
+
+
+def test_linkedin_session_matches_links_by_handle_and_by_age():
+    from datetime import datetime, timezone
+    from vigia.sources import linkedin_session as ls
+    now = datetime(2026, 10, 26, 22, 50, tzinfo=timezone.utc)
+    posts = [{"author": "Luis Mora", "age": (7, 1 / 24)}, {"author": "Ana Rojas", "age": (4, 1)},
+             {"author": "Eva Paz", "age": (5, 1)}, {"author": "Raúl Vega", "age": (5, 1)}]
+    urls = [("https://www.linkedin.com/feed/update/urn:li:activity:7520500737781604352/", "7520500737781604352"),
+            ("https://www.linkedin.com/posts/rojasana_x-share-7519139863166619648-r3z7", "7519139863166619648")]
+    handles = ls.author_handles([{"kind": "person", "url": "/in/rojasana/", "text": "Ana Rojas"}])
+    got = ls.match_urls(posts, urls, now, handles)
+    assert got[0][1] == "7520500737781604352"      # 7h ago fits only the post created 15:05 UTC
+    assert got[1][1] == "7519139863166619648"      # by the handle, not the name
+    assert got[2] == got[3] == ("", "")             # two 5d posts, no link left for either
+    assert ls.activity_url(handles["Ana Rojas"]) == "https://www.linkedin.com/in/rojasana/recent-activity/all/"
+
+
+def test_linkedin_session_reads_the_post_age_and_spanish_templates():
+    from vigia.sources import linkedin_session as ls
+    [p, _] = ls.split_posts(SESSION_TEXT)
+    assert p["age"] == (1, 1)
+    src = ls.LinkedInSession({"templates": ['"hiring" AND {phrase}',
+                                            {"template": '"buscamos" AND {phrase}', "phrases": ["Python"]}],
+                              "phrases": ["FastAPI", "Django"]})
+    assert src.queries() == ['"hiring" AND FastAPI', '"hiring" AND Django', '"buscamos" AND Python']

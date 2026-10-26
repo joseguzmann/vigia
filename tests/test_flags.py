@@ -357,3 +357,14 @@ def test_spanish_residence_restrictions(profile):
     assert reg("Buscamos candidatos que residan en República Dominicana, con experiencia en Java") == "restricted"
     assert reg("El candidato debe residir en Colombia.") == "restricted"
     assert reg("Buscamos personas que residan en Ecuador o LATAM") != "restricted"
+
+
+def test_post_saying_remote_pipe_latam_is_open():
+    from vigia.flags import region
+    from vigia.models import Job
+    job = Job(source="linkedin_session", source_id="1", title="At Acme we're hiring a Python Engineer",
+              company="Marta Ruiz", url="", location="", remote=None, tags=["post"],
+              description="📍 100% remote | LATAM\n📌 What we're looking for: Python and Django")
+    assert region(job, {"eligible_regions": ["Ecuador", "LATAM"], "home_country": "Ecuador"})[0] == "ok"
+    job.description = "Remoto LATAM. Python y Django."
+    assert region(job, {"eligible_regions": ["Ecuador", "LATAM"], "home_country": "Ecuador"})[0] == "ok"

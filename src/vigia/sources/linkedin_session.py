@@ -6,9 +6,9 @@ done by a separate container running stickerdaniel/linkedin-mcp-server, which ke
 session; this source calls its `search_posts` tool over MCP (streamable HTTP).
 
 It is paced like a person, not like a crawler:
-  - only on weekdays, a few searches a day (`per_day`), at random times inside a local-time
+  - a few searches a day (`per_day`, on the `weekdays` set), at random times inside a local-time
     window, with a minimum gap between them; the day's times are drawn once and kept in state
-  - one page of results per search, rotating through the search templates
+  - a few result pages per search (`max_pages`), rotating through the search templates
   - nothing but post search: no profiles, people, messages or connections
 
 And it stops itself: if a result looks like a checkpoint (login, captcha, "unusual activity"),
@@ -26,6 +26,7 @@ import random
 import re
 import unicodedata
 from datetime import datetime, timedelta, timezone
+from urllib.parse import unquote
 from zoneinfo import ZoneInfo
 
 from vigia import db, vocab
@@ -40,6 +41,16 @@ CHECKPOINT_RE = re.compile(
 AGE_RE = re.compile(r"\d+\s?(?:s|m|h|d|w|mo|y)(?:\s*•.*)?|Edited.*", re.I)
 log = logging.getLogger(__name__)
 POST_URL_RE = re.compile(r"/posts/[^\s\"]*?(?:activity|share|ugcPost)-(\d{17,20})")
+# The search page also gives permalinks as /feed/update/urn:li:activity:<id>/, with no author in them.
+FEED_URL_RE = re.compile(r"/feed/update/urn:li:(?:activity|share|ugcPost):(\d{17,20})")
+AGE_PARTS_RE = re.compile(r"(\d+)\s?(mo|s|m|h|d|w|y)\b", re.I)
+AGE_UNIT_DAYS = {"s": 1 / 86400, "m": 1 / 1440, "h": 1 / 24, "d": 1, "w": 7, "mo": 30, "y": 365}
+
+
+def age_of(line: str) -> tuple[int, float] | None:
+    """The post header's age ("7h", "5d • Edited") as (count, unit in days)."""
+    m = AGE_PARTS_RE.match(line or "")
+    return (int(m.group(1)), AGE_UNIT_DAYS[m.group(2).lower()]) if m else None
 
 
 def posted_from_id(post_id: str):
@@ -83,6 +94,7 @@ def split_posts(text: str) -> list[dict]:
         head_end = lines.index("Follow") if "Follow" in lines else next(
             (i for i, ln in enumerate(lines[:8]) if AGE_RE.fullmatch(ln)), 0)
         author = post_author(lines[:head_end] if head_end else lines[:1])
+        age = next((age_of(ln) for ln in lines[:10] if AGE_RE.fullmatch(ln) and age_of(ln)), None)
         body = lines[head_end + 1:] if head_end else lines[1:]
         while body and body[0].lower() in BUTTONS:  # a group post's "Join" can land after the header
             body.pop(0)
@@ -91,17 +103,29 @@ def split_posts(text: str) -> list[dict]:
                         or body[-1].startswith(("Are these results", "Your feedback", "Load more", "… more", "...more"))):
             body.pop()
         if body:
-            out.append({"author": author, "text": "\n".join(body)})
+            out.append({"author": author, "text": "\n".join(body), "age": age})
     return out
 
 
 def post_urls(references: list[dict]) -> list[tuple[str, str]]:
-    """(url, id) of the post links, in result order, without the duplicate feed/update ones."""
-    out = []
+    """(url, id) of the post links, one per post. A post can come as /posts/<author>_…-share-<id>
+    and as /feed/update/ urns for its activity and its share, created within seconds of each other:
+    those collapse into one, keeping the /posts/ form (it names the author)."""
+    found = []
     for ref in references or []:
-        m = POST_URL_RE.search(ref.get("url", ""))
+        url = ref.get("url", "")
+        m = POST_URL_RE.search(url) or FEED_URL_RE.search(url)
         if ref.get("kind") == "feed_post" and m:
-            out.append(("https://www.linkedin.com" + ref["url"].split("?")[0], m.group(1)))
+            found.append(("https://www.linkedin.com" + url.split("?")[0], m.group(1)))
+    out: list[tuple[str, str]] = []
+    for url, pid in found:
+        t = posted_from_id(pid)
+        twin = next((k for k, (u, i) in enumerate(out)
+                     if t and posted_from_id(i) and abs((posted_from_id(i) - t).total_seconds()) < 10), None)
+        if twin is None:
+            out.append((url, pid))
+        elif "/posts/" in url and "/posts/" not in out[twin][0]:
+            out[twin] = (url, pid)
     return out
 
 
@@ -110,18 +134,60 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", plain).strip("-")
 
 
-def match_urls(posts: list[dict], urls: list[tuple[str, str]]) -> list[tuple[str, str]]:
+def author_handles(references: list[dict]) -> dict[str, str]:
+    """Author name → profile path ("/in/<handle>"), from the person/company references: a
+    /posts/<handle>_… permalink often uses a handle that is not the name ("rojasana"),
+    and a post with no permalink can still be found on its author's activity page."""
+    out = {}
+    for ref in references or []:
+        m = re.match(r"/(in|company)/([^/?]+)", ref.get("url", ""))
+        if ref.get("kind") in ("person", "company") and m and isinstance(ref.get("text"), str):
+            out.setdefault(ref["text"].strip(), f"/{m.group(1)}/{unicodedata.normalize('NFC', unquote(m.group(2)))}")
+    return out
+
+
+def activity_url(path: str) -> str:
+    """Where an author's recent posts are listed."""
+    return f"https://www.linkedin.com{path}/" + ("recent-activity/all/" if path.startswith("/in/") else "posts/")
+
+
+def _window(age: tuple[int, float] | None, now: datetime):
+    """When a post with this header age was created: LinkedIn rounds down ("5d" is 5 to 6 days)."""
+    if not age:
+        return None
+    n, unit = age
+    slack = timedelta(hours=1)
+    return now - timedelta(days=(n + 1) * unit) - slack, now - timedelta(days=n * unit) + slack
+
+
+def match_urls(posts: list[dict], urls: list[tuple[str, str]], now: datetime | None = None,
+               handles: dict[str, str] | None = None) -> list[tuple[str, str]]:
     """A (url, id) per post, or ("", ""). The captured permalinks are not in result order and
     can be fewer than the posts, so match by author first (/posts/<author-handle>_activity-…),
-    then by position among what is left only when the counts agree."""
+    then by time (the id carries its creation time, the header its age) when only one post
+    fits, then by position among what is left only when the counts agree."""
+    now = now or datetime.now(timezone.utc)
     out: list[tuple[str, str]] = [("", "")] * len(posts)
     left = list(urls)
     for i, p in enumerate(posts):
-        slug = _slug(p["author"])
-        hits = [u for u in left if slug and _slug(u[0].split("/posts/")[1].split("_")[0]) == slug]
+        slugs = {x for x in (_slug(p["author"]), _slug((handles or {}).get(p["author"], "").rsplit("/", 1)[-1])) if x}
+        hits = [u for u in left if "/posts/" in u[0] and _slug(u[0].split("/posts/")[1].split("_")[0]) in slugs]
         if len(hits) == 1:
             out[i] = hits[0]
             left.remove(hits[0])
+    changed = True
+    while changed:
+        changed = False
+        free = [i for i, u in enumerate(out) if not u[0]]
+        windows = {i: _window(posts[i].get("age"), now) for i in free}
+        fits = {u: [i for i in free if windows[i] and posted_from_id(u[1])
+                    and windows[i][0] <= posted_from_id(u[1]) <= windows[i][1]] for u in left}
+        for u, cands in fits.items():
+            if len(cands) == 1 and sum(cands[0] in c for c in fits.values()) == 1:
+                out[cands[0]] = u
+                left.remove(u)
+                changed = True
+                break
     unmatched = [i for i, u in enumerate(out) if not u[0]]
     if unmatched and len(unmatched) == len(left):
         for i, u in zip(unmatched, left):
@@ -143,7 +209,7 @@ class LinkedInSession(Source):
         if saved:
             return [datetime.fromisoformat(s) for s in json.loads(saved)]
         out: list[datetime] = []
-        if local.weekday() < 5:
+        if local.weekday() in self.cfg.get("weekdays", [0, 1, 2, 3, 4]):
             start, end = self.cfg.get("hours_local", [9, 19])
             gap = timedelta(minutes=int(self.cfg.get("min_gap_minutes", 90)))
             day0 = local.replace(hour=start, minute=0, second=0, microsecond=0)
@@ -167,9 +233,15 @@ class LinkedInSession(Source):
     # --- search ------------------------------------------------------------------
 
     def queries(self) -> list[str]:
+        """Every template with the shared `phrases`, or with its own: a template can be
+        {"template": ..., "phrases": [...]} (Spanish posts need Spanish phrases)."""
         templates = self.cfg.get("templates") or ['"hiring" AND "{phrase}" AND ("LATAM" OR "Latin America")']
         phrases = self.cfg.get("phrases") or vocab.search_phrases(self.cfg.get("families"))
-        return [t.format(phrase=p) for p in phrases for t in templates]
+        out = []
+        for t in templates:
+            text, own = (t["template"], t.get("phrases") or phrases) if isinstance(t, dict) else (t, phrases)
+            out += [text.format(phrase=p) for p in own]
+        return out
 
     def fetch(self) -> list[Job]:
         paused = db.get_state(f"{self.name}.paused")
@@ -204,7 +276,10 @@ class LinkedInSession(Source):
             return []
 
         posts = split_posts(text)
-        urls = match_urls(posts, post_urls(data.get("references", {}).get("search_results", [])))
+        now = datetime.now(timezone.utc)
+        refs = data.get("references", {}).get("search_results", [])
+        handles = author_handles(refs)
+        urls = match_urls(posts, post_urls(refs), now, handles)
         out = []
         for i, p in enumerate(posts):
             if not HIRING_RE.search(p["text"]) or NOT_HIRING_RE.search(p["text"]):
@@ -213,8 +288,10 @@ class LinkedInSession(Source):
             out.append(Job(
                 source=self.name, source_id=pid or hashlib.sha1(p["text"][:200].encode()).hexdigest()[:16],
                 title=p["text"].splitlines()[0][:160], company=p["author"],
-                url=url or f"https://www.linkedin.com/search/results/content/?keywords={q}",
-                location="", remote=None, posted_at=posted_from_id(pid) if pid else None, description=p["text"],
+                url=url or (activity_url(handles[p["author"]]) if p["author"] in handles
+                            else f"https://www.linkedin.com/search/results/content/?keywords={q}"),
+                location="", remote=None, description=p["text"],
+                posted_at=posted_from_id(pid) if pid else (now - timedelta(days=p["age"][0] * p["age"][1]) if p.get("age") else None),
                 tags=["post", f"query:{q}"],
             ))
         log.info("linkedin_session %r: %d posts, %d hiring", q, len(posts), len(out))

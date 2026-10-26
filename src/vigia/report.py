@@ -19,6 +19,12 @@ ATS = {"greenhouse", "ashby", "lever", "workday", "teamtailor", "workable", "sma
        "recruitee", "bamboohr", "rippling", "manatal"}
 QUEUES = {"direct": "Queue 1 — LinkedIn, posts and job boards", "ats": "Queue 2 — company career pages (ATS)"}
 POST_SOURCES = ("linkedin_posts", "linkedin_posts_apify", "linkedin_session")
+POST_MIN_MATCH = 7  # a post the reader scored this high is listed by name, whatever the rules said
+
+
+def is_post(r) -> bool:
+    seen = {s["source"].split(":")[0] for s in json.loads(r["seen_in"] or "[]")}
+    return r["source"] in POST_SOURCES or bool(seen & set(POST_SOURCES))
 
 
 def channel(r) -> str:
@@ -60,6 +66,15 @@ def new_jobs(since: str | None = None, include_out: bool = False, limit: int = 6
     lines.append("")
     applied = {r["job_id"]: r["number"] for r in db.conn().execute(
         "SELECT job_id, number FROM applications WHERE job_id IS NOT NULL")}
+    # LinkedIn posts first and on their own: in the queues they sank under the board listings
+    # (no date, a search URL, "eligibility unclear") and good ones went unseen for days.
+    posts = [r for r in rows if is_post(r) and read.get(r["id"]) is not None
+             and read[r["id"]]["match"] >= POST_MIN_MATCH and (queue in ("", "direct"))]
+    shown = {r["id"] for r in posts}
+    if posts:
+        posts.sort(key=lambda r: (-_reading_rank(read.get(r["id"])), -_freshness_rank(r)))
+        lines += [f"# LinkedIn posts the reader scored {POST_MIN_MATCH}+ ({len(posts)})", ""]
+        lines += [_job_block(r, applied.get(r["id"]), read.get(r["id"])) for r in posts[:limit]]
     for q, title in QUEUES.items():
         if queue and q != queue:
             continue
@@ -68,7 +83,7 @@ def new_jobs(since: str | None = None, include_out: bool = False, limit: int = 6
             # Best reading first (open to the candidate, then the LLM's match), then freshest: a posting
             # applied to in its first 48 h competes with few others. Unread jobs go after the read ones.
             group = groups[(q, verdict)]
-            items = sorted(group, key=lambda r: (-_reading_rank(read.get(r["id"])), -_freshness_rank(r),
+            items = sorted((r for r in group if r["id"] not in shown), key=lambda r: (-_reading_rank(read.get(r["id"])), -_freshness_rank(r),
                                                  -(r["score"] or 0)))[:limit]
             if not items:
                 continue
@@ -102,7 +117,10 @@ def _reading_rank(rd) -> float:
 
 
 def _freshness_rank(r) -> int:
+    """By the posting's age; with no date (some posts), by how long ago Vigía first saw it."""
     age = json.loads(r["flags"] or "{}").get("age_days")
+    if age is None and r["first_seen"]:
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(r["first_seen"])).days
     return 3 if age is not None and age <= 2 else 2 if age is not None and age <= 7 else 1 if age is None else 0
 
 

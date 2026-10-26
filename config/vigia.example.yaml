@@ -215,11 +215,12 @@ sources:
   linkedin_session:
     # LinkedIn's post search with a signed-in account made only for this, through the
     # linkedin-mcp container (docker compose --profile linkedin). Paced like a person:
-    # weekdays, per_day searches at random local times with min_gap_minutes between them,
-    # one page each. Pauses itself on any login/captcha/verification page.
+    # per_day searches at random local times with min_gap_minutes between them, on `weekdays`
+    # (0 = Monday), max_pages result pages each. Pauses itself on any login/captcha/verification page.
     enabled: false
     every_minutes: 10
     per_day: 2
+    weekdays: [0, 1, 2, 3, 4]
     hours_local: [9, 19]
     min_gap_minutes: 90
     timezone: America/Guayaquil
@@ -227,8 +228,11 @@ sources:
     max_pages: 1
     server_url: http://linkedin-mcp:8000/mcp
     phrases: [FastAPI, Python React, Django]
+    # A template uses `phrases`, or its own list (a Spanish template needs Spanish phrases).
     templates:
       - '"hiring" AND {phrase} AND ("LATAM" OR "Latin America")'
+      - template: '("buscamos" OR "contratando") AND {phrase} AND (remoto OR LATAM)'
+        phrases: [Python, FastAPI]
   openroles:
     # openroles.today (data CC BY-SA 4.0): nightly dataset of postings on ~54 ATS. Used to find
     # companies to watch (their boards are checked once, like discover) and to read postings on
