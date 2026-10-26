@@ -226,6 +226,9 @@ sources:
     timezone: America/Guayaquil
     date_posted: past-24h
     max_pages: 1
+    links_per_search: 1  # permalink lookup for one good post without one, per search (one profile page load)
+    backfill_days: []    # dates (YYYY-MM-DD) to search `backfill_date_posted` instead, e.g. after adding templates
+    backfill_date_posted: past-month
     server_url: http://linkedin-mcp:8000/mcp
     phrases: [FastAPI, Python React, Django]
     # A template uses `phrases`, or its own list (a Spanish template needs Spanish phrases).

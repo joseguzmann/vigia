@@ -694,3 +694,58 @@ def test_linkedin_session_reads_the_post_age_and_spanish_templates():
                                             {"template": '"buscamos" AND {phrase}', "phrases": ["Python"]}],
                               "phrases": ["FastAPI", "Django"]})
     assert src.queries() == ['"hiring" AND FastAPI', '"hiring" AND Django', '"buscamos" AND Python']
+
+
+PROFILE = {"sections": {"main_profile": "Ana Rojas\nRecruiter\n… more\n\nActivity\n\n900 followers\n\nFollow\nPosts\n\n"
+                                        "Ana Rojas\n\n7h\n\nWe're hiring an AI Engineer in LatAm 🚀\nPython and RAG.\n… more\n\n"
+                                        "Ana Rojas reposted this\n\nBob\n\n10h\n\nI'm open to work\n\nExperience\n\nAcme\n\n6mo\n"},
+           "references": {"main_profile": [
+               {"kind": "person", "url": "/in/rojasana/"},
+               {"kind": "feed_post", "url": "/feed/update/urn:li:activity:7520514595850219521/"},
+               {"kind": "person", "url": "/in/bob/"},
+               {"kind": "feed_post", "url": "/feed/update/urn:li:activity:7520511961361739777/"}]}}
+
+
+def test_linkedin_session_finds_a_post_permalink_in_its_authors_profile():
+    from vigia.sources import linkedin_session as ls
+    assert ls.permalink_in_profile(PROFILE, "We're hiring an AI Engineer in LatAm 🚀\nmore text")[1] == "7520514595850219521"
+    assert ls.permalink_in_profile(PROFILE, "I'm open to work")[1] == "7520511961361739777"
+    assert ls.permalink_in_profile(PROFILE, "A post not on the page") is None
+
+
+def test_linkedin_session_looks_up_links_only_for_good_unlinked_posts_once(monkeypatch):
+    import json
+    from vigia import db
+    from vigia.models import Job
+    from vigia.sources import linkedin_session as ls
+    for sid, url in (("a", "https://www.linkedin.com/in/rojasana/recent-activity/all/"),
+                     ("b", "https://www.linkedin.com/posts/x_y-activity-7520514595850219521-ab")):
+        db.upsert_job(Job(source="linkedin_session", source_id=sid, title=f"We're hiring {sid}", company="Ana",
+                          url=url, description="We're hiring an AI Engineer in LatAm 🚀\nPython.", tags=["post"]),
+                      "review", 5, {})
+    ids = [db.conn().execute("SELECT id FROM jobs WHERE source_id = ?", (s,)).fetchone()[0] for s in ("a", "b")]
+    for i in ids:
+        db.save_reading(i, "m", {"is_posting": True, "ecuador_eligible": "yes", "match": 8, "why": "", "blockers": [],
+                                 "warnings": [], "eligibility_quote": "", "visa_sponsorship": "unknown",
+                                 "years_required": None, "level": "unstated"}, {})
+    calls = []
+
+    async def fake(self, name, args):
+        calls.append((name, args))
+        return json.dumps(PROFILE), False
+    monkeypatch.setattr(ls.LinkedInSession, "call_tool", fake)
+    src = ls.LinkedInSession({})
+    assert src.find_links(3) == 1
+    assert calls == [("get_person_profile", {"linkedin_username": "rojasana"})]   # the linked one is skipped
+    row = db.conn().execute("SELECT url, posted_at FROM jobs WHERE id = ?", (ids[0],)).fetchone()
+    assert row["url"].endswith("urn:li:activity:7520514595850219521/") and row["posted_at"].startswith("2026-10-26")
+    assert src.find_links(3) == 0 and len(calls) == 1                              # each post is tried once
+
+
+def test_linkedin_session_sweeps_further_back_on_backfill_days():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from vigia.sources import linkedin_session as ls
+    today = datetime.now(ZoneInfo("America/Guayaquil")).date().isoformat()
+    assert ls.LinkedInSession({"date_posted": "past-week"}).date_posted() == "past-week"
+    assert ls.LinkedInSession({"date_posted": "past-week", "backfill_days": [today]}).date_posted() == "past-month"

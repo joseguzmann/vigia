@@ -374,6 +374,12 @@ def merge_duplicates(key_for) -> int:
     return merged
 
 
+def set_job_link(job_id: int, url: str, posted_at: str | None) -> None:
+    """A better link for a stored job (a post's permalink found after the fact), and its date."""
+    conn().execute("UPDATE jobs SET url = ?, posted_at = COALESCE(?, posted_at) WHERE id = ?", (url, posted_at, job_id))
+    commit()
+
+
 def update_flags(job_id: int, verdict: str, score: int, flags: dict) -> None:
     conn().execute("UPDATE jobs SET verdict = ?, score = ?, flags = ? WHERE id = ?",
                    (verdict, score, json.dumps(flags), job_id))

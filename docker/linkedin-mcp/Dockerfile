@@ -1,4 +1,5 @@
-# stickerdaniel/linkedin-mcp-server, pinned, plus one patch: post search clicks "Load more".
+# stickerdaniel/linkedin-mcp-server, pinned, plus one patch: post search clicks "Load more"
+# and then each post's "… more" (long posts came cut off).
 # LinkedIn's post search no longer loads results by infinite scroll; it shows a "Load more"
 # button, so the server's scrolling returned only the first ~3 posts (seen 2026-10-23).
 # patch_load_more.py fails the build if the code it patches has moved.

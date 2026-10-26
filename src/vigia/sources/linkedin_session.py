@@ -195,6 +195,39 @@ def match_urls(posts: list[dict], urls: list[tuple[str, str]], now: datetime | N
     return out
 
 
+def _norm(text: str) -> str:
+    return re.sub(r"\s+", " ", text or "").strip().lower()
+
+
+def permalink_in_profile(data: dict, post_text: str) -> tuple[str, str] | None:
+    """The (url, id) of a post in its author's profile page, read with get_person_profile.
+
+    The page's Activity preview shows the latest posts in order, each under its age line ("7h"),
+    and its feed_post references come in that same order, one per post: the post is the one whose
+    text holds the first line of ours."""
+    page = (data.get("sections") or {}).get("main_profile", "")
+    start = page.find("\nActivity")
+    if start < 0:
+        return None
+    lines = page[start:].splitlines()
+    items, current = [], None
+    for ln in lines:
+        if AGE_RE.fullmatch(ln.strip()):
+            current = []
+            items.append(current)
+        elif current is not None:
+            current.append(ln)
+    first = next((ln for ln in (post_text or "").splitlines() if ln.strip()), "")
+    key = _norm(first)[:60]
+    idx = next((i for i, it in enumerate(items) if key and key in _norm("\n".join(it))), None)
+    feed = [r for r in (data.get("references") or {}).get("main_profile", []) if r.get("kind") == "feed_post"]
+    if idx is None or idx >= len(feed):
+        return None
+    url = feed[idx]["url"]
+    m = POST_URL_RE.search(url) or FEED_URL_RE.search(url)
+    return ("https://www.linkedin.com" + url.split("?")[0], m.group(1)) if m else None
+
+
 class LinkedInSession(Source):
     name = "linkedin_session"
 
@@ -295,16 +328,69 @@ class LinkedInSession(Source):
                 tags=["post", f"query:{q}"],
             ))
         log.info("linkedin_session %r: %d posts, %d hiring", q, len(posts), len(out))
+        try:
+            self.find_links(int(self.cfg.get("links_per_search", 1)))
+        except Exception as e:  # noqa: BLE001 — a missing link must not cost the search's results
+            log.warning("linkedin_session: link lookup failed: %s", e)
         return out
 
+    # --- permalinks for the good posts ------------------------------------------------
+
+    def find_links(self, limit: int, min_match: int = 7) -> int:
+        """For posts that came without a permalink (their link is the author's activity page) and
+        that the reader scored `min_match`+, read the author's profile once and take the post's
+        permalink from it: one page load each, at most `limit` per search, each post tried once."""
+        if limit <= 0:
+            return 0
+        rows = db.conn().execute(
+            "SELECT j.id, j.url, j.description FROM jobs j JOIN job_readings r ON r.job_id = j.id "
+            "WHERE j.source = ? AND j.url LIKE '%/in/%/recent-activity/%' AND r.match >= ? "
+            "ORDER BY j.first_seen DESC LIMIT 30", (self.name, min_match)).fetchall()
+        found = tried = 0
+        for r in rows:
+            key = f"{self.name}.link.{r['id']}"
+            if tried >= limit or db.get_state(key):
+                continue
+            tried += 1
+            db.set_state(key, "tried")
+            handle = r["url"].split("/in/")[1].split("/")[0]
+            raw, is_error = asyncio.run(self.call_tool("get_person_profile", {"linkedin_username": handle}))
+            db.log_request("linkedin_session", "profile", 500 if is_error else 200, 0)
+            if is_error and CHECKPOINT_RE.search(raw or ""):
+                db.set_state(f"{self.name}.paused", f"{datetime.now():%Y-%m-%d %H:%M} {re.sub(chr(10), ' ', raw)[:200]}")
+                raise RuntimeError("paused, LinkedIn asked for a check on a profile")
+            try:
+                hit = permalink_in_profile(json.loads(raw), r["description"])
+            except ValueError:
+                hit = None
+            if hit:
+                when = posted_from_id(hit[1])
+                db.set_job_link(r["id"], hit[0], when.isoformat(timespec="seconds") if when else None)
+                db.set_state(key, hit[0])
+                found += 1
+        if tried:
+            log.info("linkedin_session: permalinks found for %d of %d posts", found, tried)
+        return found
+
     async def call(self, q: str) -> tuple[str, bool]:
+        return await self.call_tool("search_posts", {"keywords": q, "date_posted": self.date_posted(),
+                                                     "max_pages": int(self.cfg.get("max_pages", 1))})
+
+    async def call_tool(self, name: str, args: dict) -> tuple[str, bool]:
         from mcp import ClientSession
         from mcp.client.streamable_http import streamable_http_client
         url = self.cfg.get("server_url", "http://linkedin-mcp:8000/mcp")
         async with streamable_http_client(url) as streams:
             async with ClientSession(streams[0], streams[1], read_timeout_seconds=240) as s:
                 await s.initialize()
-                res = await s.call_tool("search_posts", {"keywords": q, "date_posted": self.cfg.get("date_posted", "past-24h"),
-                                                         "max_pages": int(self.cfg.get("max_pages", 1))})
+                res = await s.call_tool(name, args)
         raw = "\n".join(getattr(c, "text", "") for c in getattr(res, "content", []) or [])
         return raw, bool(getattr(res, "isError", False))
+
+    def date_posted(self) -> str:
+        """`date_posted`, or `backfill_date_posted` on the dates in `backfill_days` (a one-off sweep
+        further back for templates that are new)."""
+        today = datetime.now(ZoneInfo(self.cfg.get("timezone", "America/Guayaquil"))).date().isoformat()
+        if today in (self.cfg.get("backfill_days") or []):
+            return self.cfg.get("backfill_date_posted", "past-month")
+        return self.cfg.get("date_posted", "past-24h")

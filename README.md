@@ -180,7 +180,11 @@ Vigía first saw it.
 The signed-in post search (`linkedin_session`) keeps each post's permalink when LinkedIn gives one
 (as `/posts/<author>_…` or `/feed/update/urn:li:activity:…`, matched to the post by its author's
 handle or, failing that, by its creation time against the header's age). Without one, the link is
-the author's activity page, and the date comes from the header ("5d"). Templates can carry their own
+the author's activity page, and the date comes from the header ("5d"); for posts the reader scores 7+,
+the next search also reads the author's profile once (`links_per_search`) and takes the permalink
+from its Activity preview, whose links come in the order of the posts. The search server is patched
+to open each post's "… more" so long posts are read whole, and `backfill_days` turns the search to
+`backfill_date_posted` on chosen dates for a one-off sweep further back. Templates can carry their own
 phrases (a Spanish template, Spanish phrases).
 
 Readers are tried in order (`reader.readers`):
