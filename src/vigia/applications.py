@@ -339,7 +339,7 @@ def _bucket(age) -> str:
 
 
 def stats(c: sqlite3.Connection | None = None) -> dict:
-    """Cold applications only (inbound and still-preparing ones are left out).
+    """Cold applications (inbound and still-preparing ones are left out), plus an `inbound` block.
 
     A success is a step with a person within SIGNAL_WINDOW_DAYS of applying. `pending` are
     applications younger than the window with no signal yet: they can still turn positive.
@@ -371,8 +371,24 @@ def stats(c: sqlite3.Connection | None = None) -> dict:
     statuses: dict[str, int] = {}
     for a in list_apps(c=c):
         statuses[a["status"]] = statuses.get(a["status"], 0) + 1
+
+    # Inbound has no window: the recruiter already wrote. What counts is how many reach a person.
+    inbound = [a for a in list_apps(c=c) if a["inbound"]]
+
+    def irow(group: list[dict]) -> dict:
+        return {"n": len(group), "person": sum(a["signal_days"] is not None for a in group),
+                "open": sum(a["status"] in OPEN for a in group)}
+
+    def iby(key) -> list[dict]:
+        groups: dict[str, list[dict]] = {}
+        for a in inbound:
+            groups.setdefault(str(key(a)), []).append(a)
+        return [{"key": k, **irow(groups[k])} for k in sorted(groups)]
+
     return {
         "window_days": SIGNAL_WINDOW_DAYS,
+        "inbound": {**irow(inbound), "by_month": iby(lambda a: (a["applied_at"] or "?")[:7]),
+                    "by_channel": iby(lambda a: a["channel"] or "?")},
         "total": row(apps),
         "status_counts": [{"key": s, "n": statuses[s]} for s in STATUSES if s in statuses],
         "groups": {
@@ -430,6 +446,9 @@ def export_markdown(c: sqlite3.Connection | None = None) -> str:
         "",
         f"Cold applications: {t['applied']} · step with a person within {s['window_days']} days: "
         f"{t['signals']} · still inside the window: {t['pending']}",
+        "",
+        f"Inbound (a recruiter wrote first): {s['inbound']['n']} · reached a person: "
+        f"{s['inbound']['person']} · still open: {s['inbound']['open']}",
         "",
         "| # | applied | company | role | status | channel | cv | variant | family | level | extra | age | notes |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|",

@@ -100,6 +100,19 @@ def test_stats_window_pending_and_exclusions():
     assert visa == {"regular": 3, "visa/relocation": 1}
 
 
+def test_stats_inbound_block():
+    i1 = apps.add(company="R", title="t", inbound=True, channel="linkedin", applied_at="2026-10-27")
+    apps.set_status("screen", app_id=i1["id"], on="2026-10-28")
+    i2 = apps.add(company="S", title="t", inbound=True, channel="linkedin", applied_at="2026-10-29")
+    apps.set_status("rejected", app_id=i2["id"])
+    apps.add(company="T", title="t", inbound=True, channel="email", applied_at="2026-09-30")
+    apps.add(company="Cold", title="t", applied_at="2026-10-29")                             # not inbound
+    s = apps.stats()["inbound"]
+    assert (s["n"], s["person"], s["open"]) == (3, 1, 2)
+    assert {r["key"]: (r["n"], r["person"]) for r in s["by_month"]} == {"2026-09": (1, 0), "2026-10": (2, 1)}
+    assert {r["key"]: r["n"] for r in s["by_channel"]} == {"email": 1, "linkedin": 2}
+
+
 def test_import_and_export():
     rows = [
         {"number": 1, "company": "Avenga", "title": "AI Engineer", "applied_at": "2026-09-15",

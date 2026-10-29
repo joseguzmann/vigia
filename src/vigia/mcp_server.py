@@ -217,7 +217,8 @@ def get_application(number: int | None = None, app_id: int | None = None) -> dic
 @tool
 def experiment_stats() -> dict:
     """Cold applications and how many got a step with a person within 14 days, overall and by
-    variant, visa flag, family, level, channel and posting freshness."""
+    variant, visa flag, family, level, channel and posting freshness. `inbound` counts the
+    conversations a recruiter started, how many reached a person, by month and channel."""
     return apps.stats(_c())
 
 
