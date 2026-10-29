@@ -68,8 +68,41 @@ patch = """        if CaptureMode.POST_PERMALINKS in plan.mode:
             logger.warning("Post search: expanded %d post(s)", expanded)
             _post_links = []
             try:
-                await self._session.page.evaluate(
-                    "() => { window.__vigiaCopied = []; navigator.clipboard.writeText = async t => { window.__vigiaCopied.push(t); }; }")
+                # The copy can go through Clipboard.writeText, a ClipboardItem, or execCommand on a
+                # selection: catch all three, and read the real clipboard as the last resort.
+                try:
+                    await self._session.page.context.grant_permissions(
+                        ["clipboard-read", "clipboard-write"], origin="https://www.linkedin.com")
+                except Exception as e:
+                    logger.warning("Clipboard permission not granted: %s", e)
+                await self._session.page.evaluate('''() => {
+                    window.__vigiaCopied = [];
+                    const keep = t => { if (t) window.__vigiaCopied.push(String(t)); };
+                    const C = window.Clipboard && Clipboard.prototype;
+                    if (C) {
+                        const wt = C.writeText, w = C.write;
+                        C.writeText = function (t) { keep(t); return wt ? wt.call(this, t).catch(() => {}) : Promise.resolve(); };
+                        C.write = async function (items) {
+                            for (const it of items || []) {
+                                for (const type of it.types || []) {
+                                    if (type === "text/plain") keep(await (await it.getType(type)).text());
+                                }
+                            }
+                            return w ? w.call(this, items).catch(() => {}) : undefined;
+                        };
+                    }
+                    const ex = document.execCommand.bind(document);
+                    document.execCommand = (cmd, ...a) => {
+                        if (String(cmd).toLowerCase() === "copy") {
+                            const el = document.activeElement;
+                            keep(el && "value" in el ? el.value : String(document.getSelection() || ""));
+                        }
+                        return ex(cmd, ...a);
+                    };
+                    document.addEventListener("copy", e => setTimeout(() => {
+                        try { keep(e.clipboardData && e.clipboardData.getData("text/plain")); } catch (x) {}
+                    }, 0));
+                }''')
                 prefix = "Open control menu for post by "
                 menus = self._session.page.locator(f'button[aria-label^="{prefix}"]')
                 copy = _re.compile(r"copy link", _re.I)
@@ -88,6 +121,13 @@ patch = """        if CaptureMode.POST_PERMALINKS in plan.mode:
                         got = await self._session.page.evaluate("() => window.__vigiaCopied")
                         if len(got) > before:
                             link = got[-1]
+                        else:
+                            try:
+                                text = await self._session.page.evaluate("() => navigator.clipboard.readText()")
+                            except Exception:
+                                text = ""
+                            if text and text not in [x["url"] for x in _post_links]:
+                                link = text
                     else:
                         await self._session.page.keyboard.press("Escape")
                     if self._session.page.url != start_url:
