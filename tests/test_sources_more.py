@@ -749,3 +749,53 @@ def test_linkedin_session_sweeps_further_back_on_backfill_days():
     today = datetime.now(ZoneInfo("America/Guayaquil")).date().isoformat()
     assert ls.LinkedInSession({"date_posted": "past-week"}).date_posted() == "past-week"
     assert ls.LinkedInSession({"date_posted": "past-week", "backfill_days": [today]}).date_posted() == "past-month"
+
+
+def test_linkedin_session_pairs_copied_links_with_posts_by_author():
+    from vigia.sources import linkedin_session as ls
+    posts = [{"author": "Ana Rojas"}, {"author": "Hire Co"}, {"author": "Raúl Vega"}]
+    refs = [{"kind": "person", "url": "/in/rojasana/", "text": "Ana Rojas"},
+            {"kind": "post_link", "url": "https://lnkd.in/p/a", "text": "Ana Rojas"},
+            {"kind": "post_link", "url": "", "text": "Hire Co"},
+            {"kind": "post_link", "url": "https://lnkd.in/p/c", "text": "Raul Vega"}]
+    assert ls.links_by_author(posts, ls.copied_links(refs)) == ["https://lnkd.in/p/a", "", "https://lnkd.in/p/c"]
+    # A post the menus do not have gets nothing, and the next one still finds its own.
+    assert ls.links_by_author([{"author": "X"}] + posts[2:], ls.copied_links(refs)) == ["", "https://lnkd.in/p/c"]
+
+
+def test_linkedin_session_resolves_a_short_link_without_its_tracking(monkeypatch):
+    from vigia.sources import linkedin_session as ls
+
+    class Resp:
+        headers = {"location": "https://www.linkedin.com/posts/ana-rojas_hiring-share-7520590888306282497-ASJT/"
+                               "?utm_source=share&rcm=ACoAAB"}
+    monkeypatch.setattr(ls.http, "get", lambda *a, **k: Resp())
+    assert ls.resolve_short("https://lnkd.in/p/abc123") == (
+        "https://www.linkedin.com/posts/ana-rojas_hiring-share-7520590888306282497-ASJT/", "7520590888306282497")
+    monkeypatch.setattr(ls.http, "get", lambda *a, **k: None)
+    assert ls.resolve_short("https://lnkd.in/p/x") is None
+
+
+def test_linkedin_session_reads_the_posts_of_a_watched_profile(monkeypatch):
+    from vigia.sources import linkedin_session as ls
+    posts = ls.posts_in_profile(PROFILE)
+    assert [i for _, _, i in posts] == ["7520514595850219521", "7520511961361739777"]
+    assert posts[0][0] == "We're hiring an AI Engineer in LatAm 🚀\nPython and RAG."
+    assert "Experience" not in posts[1][0]
+
+    state = {}
+    monkeypatch.setattr(ls.db, "get_state", lambda k, d=None: state.get(k, d))
+    monkeypatch.setattr(ls.db, "set_state", lambda k, v: state.__setitem__(k, v))
+    monkeypatch.setattr(ls.db, "log_request", lambda *a, **k: None)
+    calls = []
+
+    async def call_tool(self, name, args):
+        calls.append(args["linkedin_username"])
+        return json.dumps(PROFILE), False
+    monkeypatch.setattr(ls.LinkedInSession, "call_tool", call_tool)
+    src = ls.LinkedInSession({"watch_profiles": ["rojasana", "otra"], "watch_every_days": 3})
+    [job] = src.watch(1)
+    assert job.source_id == "7520514595850219521" and job.company == "Ana Rojas" and "watch:rojasana" in job.tags
+    src.watch(1)
+    assert calls == ["rojasana", "otra"]
+    assert src.watch(1) == [] and len(calls) == 2  # both read within 3 days

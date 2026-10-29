@@ -236,6 +236,11 @@ sources:
       - '"hiring" AND {phrase} AND ("LATAM" OR "Latin America")'
       - template: '("buscamos" OR "contratando") AND {phrase} AND (remoto OR LATAM)'
         phrases: [Python, FastAPI]
+    # Recruiters who post openings every week (LinkedIn handles): one profile read per search,
+    # each handle every watch_every_days, its hiring posts kept with their permalinks.
+    watch_profiles: []
+    watch_every_days: 3
+    watch_per_search: 1
   openroles:
     # openroles.today (data CC BY-SA 4.0): nightly dataset of postings on ~54 ATS. Used to find
     # companies to watch (their boards are checked once, like discover) and to read postings on

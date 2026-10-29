@@ -1,10 +1,17 @@
-"""Make post search click "Load more" before reading the page, then open each post's "… more".
+"""Make post search click "Load more" before reading the page, open each post's "… more", and copy
+each post's link.
 
 Scrolls to the end, clicks, and repeats: up to one click per requested page (max_scrolls / 5), so
 `max_pages` keeps meaning "how deep to go". Stops when the button is gone. Then it clicks every
 post's "… more" button, so long posts are read whole (the text is already on the page: no request).
 Only <button> elements are clicked, and if a click ever leaves the results page it goes back and
 stops expanding.
+
+The search page has no permalink per post (the upstream reader takes them from network payloads,
+unordered), so each post's control menu is opened and its "Copy link to post" clicked with the
+clipboard write caught in the page: one lnkd.in short link per post, in result order, with the
+author from the menu button's label. They come back as references of kind "post_link". No page
+load, only the short-link request LinkedIn makes for the copy.
 """
 from pathlib import Path
 
@@ -59,7 +66,47 @@ patch = """        if CaptureMode.POST_PERMALINKS in plan.mode:
             except Exception as e:
                 logger.warning("'… more' expansion stopped after %d: %s", expanded, e)
             logger.warning("Post search: expanded %d post(s)", expanded)
+            _post_links = []
+            try:
+                await self._session.page.evaluate(
+                    "() => { window.__vigiaCopied = []; navigator.clipboard.writeText = async t => { window.__vigiaCopied.push(t); }; }")
+                prefix = "Open control menu for post by "
+                menus = self._session.page.locator(f'button[aria-label^="{prefix}"]')
+                copy = _re.compile(r"copy link", _re.I)
+                for k in range(min(await menus.count(), 60)):
+                    m = menus.nth(k)
+                    label = await m.get_attribute("aria-label") or ""
+                    await m.scroll_into_view_if_needed(timeout=2000)
+                    await m.click(timeout=2000)
+                    await self._session.delay(0.5)
+                    item = self._session.page.locator("[role=menuitem]").filter(has_text=copy)
+                    link = ""
+                    if await item.count():
+                        before = await self._session.page.evaluate("() => window.__vigiaCopied.length")
+                        await item.first.click(timeout=2000)
+                        await self._session.delay(0.6)
+                        got = await self._session.page.evaluate("() => window.__vigiaCopied")
+                        if len(got) > before:
+                            link = got[-1]
+                    else:
+                        await self._session.page.keyboard.press("Escape")
+                    if self._session.page.url != start_url:
+                        await self._session.page.go_back()
+                        logger.warning("Post search: a menu click left the page; stopped copying links")
+                        break
+                    _post_links.append({"kind": "post_link", "url": link, "text": label[len(prefix):]})
+            except OffLinkedInLandingError:
+                raise
+            except Exception as e:
+                logger.warning("Copying post links stopped after %d: %s", len(_post_links), e)
+            logger.warning("Post search: copied %d post link(s)", sum(1 for x in _post_links if x["url"]))
 
 """
-path.write_text(src.replace(anchor, patch + anchor))
+src = src.replace(anchor, patch + anchor)
+ret = """        return ExtractedSection(text=cleaned, references=references)"""
+assert src.count(ret) == 1, "capture.py changed: the post-link patch no longer applies"
+src = src.replace(ret, """        if locals().get("_post_links"):
+            references = list(references) + _post_links
+""" + ret)
+path.write_text(src)
 print("patched", path)

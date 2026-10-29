@@ -9,7 +9,8 @@ It is paced like a person, not like a crawler:
   - a few searches a day (`per_day`, on the `weekdays` set), at random times inside a local-time
     window, with a minimum gap between them; the day's times are drawn once and kept in state
   - a few result pages per search (`max_pages`), rotating through the search templates
-  - nothing but post search: no profiles, people, messages or connections
+  - post search, plus a few profile reads (permalinks of good posts, recruiters in
+    `watch_profiles`): no people search, messages or connections
 
 And it stops itself: if a result looks like a checkpoint (login, captcha, "unusual activity"),
 the source pauses (state `linkedin_session.paused`) and reports it as its error until someone
@@ -29,7 +30,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote
 from zoneinfo import ZoneInfo
 
-from vigia import db, vocab
+from vigia import db, http, vocab
 from vigia.models import Job
 from vigia.sources.base import Source
 from vigia.sources.linkedin_posts import HIRING_RE, NOT_HIRING_RE
@@ -134,6 +135,34 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", plain).strip("-")
 
 
+def copied_links(references: list[dict]) -> list[tuple[str, str]]:
+    """(author, lnkd.in short link) per post, in result order: what linkedin-mcp's patch copied
+    with each post's "Copy link to post" (an empty link when the copy failed)."""
+    return [(r.get("text") or "", r.get("url") or "") for r in references or [] if r.get("kind") == "post_link"]
+
+
+def links_by_author(posts: list[dict], copied: list[tuple[str, str]]) -> list[str]:
+    """The copied link of each post, or "". The menus come in the same order as the posts, so
+    walk both and pair a post with the next menu by the same author; a post the menus skipped
+    (a header the reader split differently) gets nothing rather than a neighbour's link."""
+    out, j = [""] * len(posts), 0
+    for i, p in enumerate(posts):
+        slug = _slug(p["author"])
+        k = next((k for k in range(j, len(copied)) if _slug(copied[k][0]) == slug), None)
+        if k is not None:
+            out[i], j = copied[k][1], k + 1
+    return out
+
+
+def resolve_short(url: str) -> tuple[str, str] | None:
+    """A lnkd.in short link → (permalink, post id), from its redirect: no LinkedIn session, and
+    the tracking query (it names the account that copied it) is dropped."""
+    resp = http.get("linkedin_session", "short_link", url, allow_redirects=False, keep_errors=True)
+    target = (resp.headers.get("location", "") if resp is not None else "").split("?")[0]
+    m = POST_URL_RE.search(target) or FEED_URL_RE.search(target)
+    return (target, m.group(1)) if m else None
+
+
 def author_handles(references: list[dict]) -> dict[str, str]:
     """Author name → profile path ("/in/<handle>"), from the person/company references: a
     /posts/<handle>_… permalink often uses a handle that is not the name ("rojasana"),
@@ -228,6 +257,35 @@ def permalink_in_profile(data: dict, post_text: str) -> tuple[str, str] | None:
     return ("https://www.linkedin.com" + url.split("?")[0], m.group(1)) if m else None
 
 
+def posts_in_profile(data: dict) -> list[tuple[str, str, str]]:
+    """(text, url, id) of each post in a profile's Activity preview, newest first: the posts
+    under their age lines, paired in order with the page's feed_post references."""
+    page = (data.get("sections") or {}).get("main_profile", "")
+    start = page.find("\nActivity")
+    if start < 0:
+        return []
+    items, current = [], None
+    for ln in page[start:].splitlines():
+        if AGE_RE.fullmatch(ln.strip()):
+            current = []
+            items.append(current)
+        elif current is not None:
+            current.append(ln)
+    feed = [r for r in (data.get("references") or {}).get("main_profile", []) if r.get("kind") == "feed_post"]
+    out = []
+    for lines, ref in zip(items, feed):
+        lines = [ln.strip() for ln in lines if ln.strip()]
+        # A post's text ends at its "… more"; what follows is the next post's header, or the
+        # rest of the profile after the last one.
+        cut = next((k for k, ln in enumerate(lines) if re.fullmatch(r"(?:…|\.\.\.)\s*(?:see\s+)?more", ln, re.I)), None)
+        text = "\n".join(lines[:cut])
+        text = re.split(r"\n(?:Experience|Education|Skills)(?:\n|$)", text)[0]
+        m = POST_URL_RE.search(ref["url"]) or FEED_URL_RE.search(ref["url"])
+        if m and text:
+            out.append((text, "https://www.linkedin.com" + ref["url"].split("?")[0], m.group(1)))
+    return out
+
+
 class LinkedInSession(Source):
     name = "linkedin_session"
 
@@ -313,11 +371,14 @@ class LinkedInSession(Source):
         refs = data.get("references", {}).get("search_results", [])
         handles = author_handles(refs)
         urls = match_urls(posts, post_urls(refs), now, handles)
+        copied = links_by_author(posts, copied_links(refs))
         out = []
         for i, p in enumerate(posts):
             if not HIRING_RE.search(p["text"]) or NOT_HIRING_RE.search(p["text"]):
                 continue
-            url, pid = urls[i]
+            # The post's own copied link beats the guess from the unordered payload links.
+            exact = resolve_short(copied[i]) if copied[i] else None
+            url, pid = exact or urls[i]
             out.append(Job(
                 source=self.name, source_id=pid or hashlib.sha1(p["text"][:200].encode()).hexdigest()[:16],
                 title=p["text"].splitlines()[0][:160], company=p["author"],
@@ -327,11 +388,54 @@ class LinkedInSession(Source):
                 posted_at=posted_from_id(pid) if pid else (now - timedelta(days=p["age"][0] * p["age"][1]) if p.get("age") else None),
                 tags=["post", f"query:{q}"],
             ))
-        log.info("linkedin_session %r: %d posts, %d hiring", q, len(posts), len(out))
+        log.info("linkedin_session %r: %d posts, %d hiring, %d with their copied link", q, len(posts), len(out),
+                 sum(1 for i, p in enumerate(posts) if copied[i]))
+        try:
+            out += self.watch(int(self.cfg.get("watch_per_search", 1)))
+        except RuntimeError:
+            raise
+        except Exception as e:  # noqa: BLE001 — a watched profile must not cost the search's results
+            log.warning("linkedin_session: watched profile failed: %s", e)
         try:
             self.find_links(int(self.cfg.get("links_per_search", 1)))
         except Exception as e:  # noqa: BLE001 — a missing link must not cost the search's results
             log.warning("linkedin_session: link lookup failed: %s", e)
+        return out
+
+    # --- recruiters to watch ---------------------------------------------------------
+
+    def watch(self, limit: int) -> list[Job]:
+        """Recruiters who post openings every week (`watch_profiles`, LinkedIn handles): read the
+        one seen longest ago, if `watch_every_days` have passed, and keep its hiring posts. One
+        page load each, at most `limit` per search."""
+        handles = self.cfg.get("watch_profiles") or []
+        every = timedelta(days=float(self.cfg.get("watch_every_days", 3)))
+        now = datetime.now(timezone.utc)
+        due = [h for h in handles if not db.get_state(f"{self.name}.watch.{h}")
+               or now - datetime.fromisoformat(db.get_state(f"{self.name}.watch.{h}")) >= every]
+        due.sort(key=lambda h: db.get_state(f"{self.name}.watch.{h}", ""))
+        out: list[Job] = []
+        for handle in due[:max(limit, 0)]:
+            db.set_state(f"{self.name}.watch.{handle}", now.isoformat(timespec="seconds"))
+            raw, is_error = asyncio.run(self.call_tool("get_person_profile", {"linkedin_username": handle}))
+            db.log_request("linkedin_session", "watch", 500 if is_error else 200, 0)
+            if is_error and CHECKPOINT_RE.search(raw or ""):
+                db.set_state(f"{self.name}.paused", f"{datetime.now():%Y-%m-%d %H:%M} {re.sub(chr(10), ' ', raw)[:200]}")
+                raise RuntimeError("paused, LinkedIn asked for a check on a watched profile")
+            try:
+                data = json.loads(raw)
+            except ValueError:
+                continue
+            name = ((data.get("sections") or {}).get("main_profile", "").strip().splitlines() or [handle])[0]
+            for text, url, pid in posts_in_profile(data):
+                if not HIRING_RE.search(text) or NOT_HIRING_RE.search(text):
+                    continue
+                out.append(Job(
+                    source=self.name, source_id=pid, title=text.splitlines()[0][:160], company=name, url=url,
+                    location="", remote=None, description=text, posted_at=posted_from_id(pid),
+                    tags=["post", f"watch:{handle}"],
+                ))
+            log.info("linkedin_session: watched %s, %d hiring posts", handle, len(out))
         return out
 
     # --- permalinks for the good posts ------------------------------------------------
