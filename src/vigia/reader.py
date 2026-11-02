@@ -233,7 +233,7 @@ def api_spent_this_month() -> float:
 
 # --- the loop --------------------------------------------------------------------------
 
-POST_SOURCES = ("linkedin_posts", "linkedin_posts_apify", "linkedin_session")
+POST_SOURCES = ("linkedin_posts", "linkedin_posts_apify", "linkedin_session", "linkedin_session_2")
 
 
 def pending(limit: int) -> list[dict]:
@@ -244,10 +244,10 @@ def pending(limit: int) -> list[dict]:
     rows = db.conn().execute(
         """SELECT j.* FROM jobs j LEFT JOIN job_readings r ON r.job_id = j.id
            WHERE r.job_id IS NULL AND j.first_seen >= ? AND length(coalesce(j.description, '')) >= 200
-           AND (j.verdict IN ('fit', 'review', 'extra') OR j.source IN (?, ?, ?))
+           AND (j.verdict IN ('fit', 'review', 'extra') OR j.source IN ({}))
            ORDER BY CASE j.verdict WHEN 'fit' THEN 0 WHEN 'review' THEN 1 WHEN 'extra' THEN 2 ELSE 3 END,
                     j.first_seen DESC
-           LIMIT ?""", (since, *POST_SOURCES, limit)).fetchall()
+           LIMIT ?""".format(", ".join("?" * len(POST_SOURCES))), (since, *POST_SOURCES, limit)).fetchall()
     return [dict(r) for r in rows]
 
 

@@ -349,9 +349,9 @@ class LinkedInSession(Source):
         try:
             raw, is_error = asyncio.run(self.call(q))
         except Exception as e:  # noqa: BLE001 — the server being down is not a checkpoint
-            db.log_request("linkedin_session", "search_posts", 0, 0)
+            db.log_request(self.name, "search_posts", 0, 0)
             raise RuntimeError(f"search server unreachable: {type(e).__name__}") from e
-        db.log_request("linkedin_session", "search_posts", 500 if is_error else 200,
+        db.log_request(self.name, "search_posts", 500 if is_error else 200,
                        int((datetime.now() - started).total_seconds() * 1000))
         try:
             data = json.loads(raw)
@@ -418,7 +418,7 @@ class LinkedInSession(Source):
         for handle in due[:max(limit, 0)]:
             db.set_state(f"{self.name}.watch.{handle}", now.isoformat(timespec="seconds"))
             raw, is_error = asyncio.run(self.call_tool("get_person_profile", {"linkedin_username": handle}))
-            db.log_request("linkedin_session", "watch", 500 if is_error else 200, 0)
+            db.log_request(self.name, "watch", 500 if is_error else 200, 0)
             if is_error and CHECKPOINT_RE.search(raw or ""):
                 db.set_state(f"{self.name}.paused", f"{datetime.now():%Y-%m-%d %H:%M} {re.sub(chr(10), ' ', raw)[:200]}")
                 raise RuntimeError("paused, LinkedIn asked for a check on a watched profile")
@@ -459,7 +459,7 @@ class LinkedInSession(Source):
             db.set_state(key, "tried")
             handle = r["url"].split("/in/")[1].split("/")[0]
             raw, is_error = asyncio.run(self.call_tool("get_person_profile", {"linkedin_username": handle}))
-            db.log_request("linkedin_session", "profile", 500 if is_error else 200, 0)
+            db.log_request(self.name, "profile", 500 if is_error else 200, 0)
             if is_error and CHECKPOINT_RE.search(raw or ""):
                 db.set_state(f"{self.name}.paused", f"{datetime.now():%Y-%m-%d %H:%M} {re.sub(chr(10), ' ', raw)[:200]}")
                 raise RuntimeError("paused, LinkedIn asked for a check on a profile")
@@ -498,3 +498,9 @@ class LinkedInSession(Source):
         if today in (self.cfg.get("backfill_days") or []):
             return self.cfg.get("backfill_date_posted", "past-month")
         return self.cfg.get("date_posted", "past-24h")
+
+
+class LinkedInSession2(LinkedInSession):
+    """A second account doing the same post search with its own config, container and state
+    (pause, cursor, slots), so one account can be paused or warmed up without touching the other."""
+    name = "linkedin_session_2"

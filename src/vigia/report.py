@@ -21,7 +21,7 @@ ATS = {"greenhouse", "ashby", "lever", "workday", "teamtailor", "workable", "sma
 QUEUES = {"posts": "List 1 — LinkedIn posts", "boards": "List 2 — job boards (LinkedIn jobs, boards, email alerts)",
           "ats": "List 3 — company career pages (ATS)"}
 QUEUE_ALIASES = {"direct": ("posts", "boards")}  # the old name of lists 1 and 2 together
-POST_SOURCES = ("linkedin_posts", "linkedin_posts_apify", "linkedin_session")
+POST_SOURCES = ("linkedin_posts", "linkedin_posts_apify", "linkedin_session", "linkedin_session_2")
 
 
 def is_post(r) -> bool:

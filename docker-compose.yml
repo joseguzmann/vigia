@@ -69,5 +69,17 @@ services:
     volumes:
       - ${LINKEDIN_SESSION_DIR:-./linkedin-session}:/home/pwuser/.linkedin-mcp
 
+  # A second account for source linkedin_session_2 (its own session, searches and pace).
+  linkedin-mcp-b:
+    image: vigia-linkedin-mcp
+    container_name: linkedin-mcp-b
+    profiles: [linkedin]
+    restart: unless-stopped
+    command: ["--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8000", "--no-auto-import"]
+    environment:
+      FASTMCP_HTTP_ALLOWED_HOSTS: '["linkedin-mcp-b", "linkedin-mcp-b:8000"]'
+    volumes:
+      - ${LINKEDIN_SESSION_2_DIR:-./linkedin-session-2}:/home/pwuser/.linkedin-mcp
+
 volumes:
   vigia-data:

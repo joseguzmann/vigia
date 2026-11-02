@@ -356,6 +356,24 @@ def test_linkedin_session_keeps_hiring_posts_and_pauses_on_a_check(monkeypatch):
         src.fetch()
 
 
+def test_second_session_account_has_its_own_pause_and_counts_as_posts(monkeypatch):
+    import json, pytest
+    from vigia import report
+    from vigia.sources import REGISTRY, linkedin_session as ls
+    state, logged = {}, []
+    monkeypatch.setattr(ls.db, "get_state", lambda k, d=None: state.get(k, d))
+    monkeypatch.setattr(ls.db, "set_state", lambda k, v: state.__setitem__(k, v))
+    monkeypatch.setattr(ls.db, "log_request", lambda *a: logged.append(a[0]))
+    assert REGISTRY["linkedin_session_2"] is ls.LinkedInSession2
+    src = ls.LinkedInSession2({"phrases": ["FastAPI"]})
+    monkeypatch.setattr(src, "call", lambda q: _done(("LinkedIn showed a security verification (captcha)", True)))
+    with pytest.raises(RuntimeError, match="paused"):
+        src.fetch()
+    assert state["linkedin_session_2.paused"] and "linkedin_session.paused" not in state  # account 1 keeps going
+    assert set(logged) == {"linkedin_session_2"}  # its page loads are counted apart
+    assert report.is_post({"source": "linkedin_session_2", "seen_in": "[]"})
+
+
 async def _done(value):
     return value
 
