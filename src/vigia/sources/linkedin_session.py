@@ -163,6 +163,23 @@ def resolve_short(url: str) -> tuple[str, str] | None:
     return (target, m.group(1)) if m else None
 
 
+def resolve_cached(author: str, text: str, short: str) -> tuple[str, str] | None:
+    """`resolve_short`, once per post. Every search copies a fresh lnkd.in link for every hiring
+    post it shows, also the ones seen yesterday, and each resolution is one logged-out request to
+    LinkedIn from the same IP as the guest job search (`linkedin`), whose limit is a few requests
+    before a ~4 h block (2026-11-19: ~350 resolutions a day, guest search blocked half the day).
+    The permalink of a post does not change, so it is kept by author + start of the text."""
+    key = "lnkd:" + hashlib.sha1(f"{author}\n{text[:200]}".encode()).hexdigest()[:16]
+    hit = db.get_state(key)
+    if hit:
+        url, pid = json.loads(hit)
+        return url, pid
+    found = resolve_short(short)
+    if found:
+        db.set_state(key, json.dumps(list(found)))
+    return found
+
+
 def author_handles(references: list[dict]) -> dict[str, str]:
     """Author name → profile path ("/in/<handle>"), from the person/company references: a
     /posts/<handle>_… permalink often uses a handle that is not the name ("rojasana"),
@@ -377,7 +394,7 @@ class LinkedInSession(Source):
             if not HIRING_RE.search(p["text"]) or NOT_HIRING_RE.search(p["text"]):
                 continue
             # The post's own copied link beats the guess from the unordered payload links.
-            exact = resolve_short(copied[i]) if copied[i] else None
+            exact = resolve_cached(p["author"], p["text"], copied[i]) if copied[i] else None
             url, pid = exact or urls[i]
             out.append(Job(
                 source=self.name, source_id=pid or hashlib.sha1(p["text"][:200].encode()).hexdigest()[:16],

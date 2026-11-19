@@ -794,6 +794,25 @@ def test_linkedin_session_resolves_a_short_link_without_its_tracking(monkeypatch
     assert ls.resolve_short("https://lnkd.in/p/x") is None
 
 
+def test_linkedin_session_resolves_each_post_link_only_once(monkeypatch):
+    from vigia.sources import linkedin_session as ls
+    calls = []
+
+    class Resp:
+        headers = {"location": "https://www.linkedin.com/posts/ana_hiring-share-7520590888306282497-ASJT/?rcm=x"}
+    monkeypatch.setattr(ls.http, "get", lambda *a, **k: calls.append(a) or Resp())
+    want = ("https://www.linkedin.com/posts/ana_hiring-share-7520590888306282497-ASJT/", "7520590888306282497")
+    assert ls.resolve_cached("Ana", "We are hiring", "https://lnkd.in/p/one") == want
+    # The next search copies a new short link for the same post: no second request.
+    assert ls.resolve_cached("Ana", "We are hiring", "https://lnkd.in/p/two") == want
+    assert len(calls) == 1
+    # A failed resolution is not remembered: the next search tries again.
+    monkeypatch.setattr(ls.http, "get", lambda *a, **k: calls.append(a) or None)
+    assert ls.resolve_cached("Luis", "Hiring now", "https://lnkd.in/p/x") is None
+    assert ls.resolve_cached("Luis", "Hiring now", "https://lnkd.in/p/y") is None
+    assert len(calls) == 3
+
+
 def test_linkedin_session_reads_the_posts_of_a_watched_profile(monkeypatch):
     from vigia.sources import linkedin_session as ls
     posts = ls.posts_in_profile(PROFILE)
